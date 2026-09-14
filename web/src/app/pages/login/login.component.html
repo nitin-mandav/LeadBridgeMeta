@@ -1,0 +1,26 @@
+<div class="auth-page">
+  <form class="card auth-card" (ngSubmit)="submit()">
+    <h1>Sign in</h1>
+    <p class="subtitle">LeadBridge Meta &rarr; GHL</p>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" [(ngModel)]="email" required autocomplete="email" />
+    </div>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" [(ngModel)]="password" required autocomplete="current-password" />
+    </div>
+
+    @if (errorMessage()) {
+      <p class="error-text">{{ errorMessage() }}</p>
+    }
+
+    <button class="btn btn-primary" type="submit" [disabled]="isSubmitting()">
+      {{ isSubmitting() ? 'Signing in…' : 'Sign in' }}
+    </button>
+
+    <p class="switch-link">No account yet? <a routerLink="/register">Create one</a></p>
+  </form>
+</div>

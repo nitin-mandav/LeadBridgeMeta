@@ -1,0 +1,68 @@
+<h1>Connections</h1>
+<p class="page-subtitle">Connect a Meta ad account and a GoHighLevel location, then map forms to it under Field Mapping.</p>
+
+@if (notice(); as n) {
+  <div class="notice" [class.notice-error]="n.kind === 'error'">{{ n.text }}</div>
+}
+
+<div class="card section">
+  <div class="section-header">
+    <h2>Meta (Facebook Lead Ads)</h2>
+    <button class="btn btn-primary" (click)="connectMeta()">Connect Meta account</button>
+  </div>
+
+  @if (metaConnections().length === 0) {
+    <p class="empty-state">No Meta account connected yet.</p>
+  } @else {
+    @for (conn of metaConnections(); track conn.id) {
+      <div class="connection-block">
+        <div class="connection-title">{{ conn.facebookUserName }}</div>
+        @for (page of conn.pages; track page.id) {
+          <div class="page-row">
+            <div>
+              <strong>{{ page.pageName }}</strong>
+              <span class="muted"> · {{ page.forms.length }} form(s)</span>
+            </div>
+            @if (page.isLeadgenWebhookSubscribed) {
+              <span class="badge badge-sent">Subscribed</span>
+            } @else {
+              <button class="btn btn-secondary" [disabled]="subscribingPageId() === page.pageId" (click)="subscribePage(page.id)">
+                {{ subscribingPageId() === page.id ? 'Subscribing…' : 'Subscribe to leads' }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</div>
+
+<div class="card section">
+  <div class="section-header">
+    <h2>GoHighLevel</h2>
+    <button class="btn btn-primary" (click)="connectGhl()">Connect GHL location</button>
+  </div>
+
+  @if (ghlConnections().length === 0) {
+    <p class="empty-state">No GHL location connected yet.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Location</th>
+          <th>Location ID</th>
+          <th>Token expires</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of ghlConnections(); track c.id) {
+          <tr>
+            <td>{{ c.locationName }}</td>
+            <td>{{ c.locationId }}</td>
+            <td>{{ c.accessTokenExpiresAtUtc | date: 'short' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

@@ -1,0 +1,36 @@
+<div class="auth-page">
+  <form class="card auth-card" (ngSubmit)="submit()">
+    <h1>Create your account</h1>
+    <p class="subtitle">Set up your agency workspace</p>
+
+    <div class="field">
+      <label for="companyName">Company / agency name</label>
+      <input id="companyName" name="companyName" [(ngModel)]="companyName" required />
+    </div>
+
+    <div class="field">
+      <label for="displayName">Your name</label>
+      <input id="displayName" name="displayName" [(ngModel)]="displayName" required />
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" [(ngModel)]="email" required autocomplete="email" />
+    </div>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" [(ngModel)]="password" required minlength="8" autocomplete="new-password" />
+    </div>
+
+    @if (errorMessage()) {
+      <p class="error-text">{{ errorMessage() }}</p>
+    }
+
+    <button class="btn btn-primary" type="submit" [disabled]="isSubmitting()">
+      {{ isSubmitting() ? 'Creating account…' : 'Create account' }}
+    </button>
+
+    <p class="switch-link">Already have an account? <a routerLink="/login">Sign in</a></p>
+  </form>
+</div>

@@ -1,0 +1,41 @@
+<h1>Leads</h1>
+<p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL.</p>
+
+<div class="card">
+  @if (isLoading()) {
+    <p>Loading…</p>
+  } @else if (leads().length === 0) {
+    <p class="empty-state">No leads yet. Once a Meta form is connected and mapped, submissions will show up here.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Received</th>
+          <th>Form</th>
+          <th>Status</th>
+          <th>GHL contact</th>
+          <th>Error</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (lead of leads(); track lead.id) {
+          <tr>
+            <td>{{ lead.receivedAtUtc | date: 'short' }}</td>
+            <td>{{ lead.formName }}</td>
+            <td><span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span></td>
+            <td>{{ lead.ghlContactId || '—' }}</td>
+            <td class="error-cell">{{ lead.errorMessage || '—' }}</td>
+            <td>
+              @if (lead.status === 3) {
+                <button class="btn btn-secondary" [disabled]="retryingId() === lead.id" (click)="retry(lead)">
+                  {{ retryingId() === lead.id ? 'Retrying…' : 'Retry' }}
+                </button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

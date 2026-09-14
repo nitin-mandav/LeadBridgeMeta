@@ -1,0 +1,72 @@
+<h1>Field Mapping</h1>
+<p class="page-subtitle">Pick a Meta lead form, send it to a GHL location, and map each question to a GHL field.</p>
+
+@if (formOptions().length === 0) {
+  <div class="card">
+    <p class="empty-state">No Meta lead forms found yet. Connect a Meta Page and subscribe it under Connections first.</p>
+  </div>
+} @else {
+  <div class="card section">
+    <div class="field">
+      <label for="formSelect">Meta lead form</label>
+      <select id="formSelect" [ngModel]="selectedFormId()" (ngModelChange)="selectForm($event)">
+        @for (opt of formOptions(); track opt.form.id) {
+          <option [value]="opt.form.id">{{ opt.pageName }} — {{ opt.form.formName }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="ghlSelect">Send leads to GHL location</label>
+      <div class="inline">
+        <select id="ghlSelect" [(ngModel)]="selectedGhlConnectionId">
+          <option value="" disabled>Select a location…</option>
+          @for (c of ghlConnections(); track c.id) {
+            <option [value]="c.id">{{ c.locationName }}</option>
+          }
+        </select>
+        <button class="btn btn-primary" [disabled]="isSavingLocation() || !selectedGhlConnectionId()" (click)="saveGhlConnection()">
+          {{ isSavingLocation() ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card section">
+    <h2>Field mappings for this form</h2>
+    <p class="muted">Common fields (email, name, phone) map automatically. Add rows below for custom questions or tags.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Meta field key</th>
+          <th>GHL target</th>
+          <th>GHL field key</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (m of fieldMappings(); track m.id) {
+          <tr>
+            <td>{{ m.metaFieldKey }}</td>
+            <td>{{ targetTypeLabels[m.targetType] }}</td>
+            <td>{{ m.ghlFieldKey }}</td>
+            <td><button class="btn btn-secondary" (click)="deleteFieldMapping(m)">Remove</button></td>
+          </tr>
+        }
+        <tr>
+          <td><input [(ngModel)]="newFieldKey" placeholder="e.g. what_city_are_you_in" /></td>
+          <td>
+            <select [(ngModel)]="newTargetType">
+              @for (t of targetTypes; track t) {
+                <option [value]="t">{{ targetTypeLabels[t] }}</option>
+              }
+            </select>
+          </td>
+          <td><input [(ngModel)]="newGhlFieldKey" placeholder="GHL field id / tag value" /></td>
+          <td><button class="btn btn-primary" (click)="addFieldMapping()">Add</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+}
