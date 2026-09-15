@@ -43,8 +43,10 @@ public class MetaController : ControllerBase
     }
 
     [HttpGet("callback")]
-    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, CancellationToken ct)
+    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, [FromQuery] bool? json, CancellationToken ct)
     {
+        var wantsJson = json == true || Request.Headers.Accept.ToString().Contains("application/json");
+
         Guid tenantId;
         try
         {
@@ -52,6 +54,8 @@ public class MetaController : ControllerBase
         }
         catch (Exception ex)
         {
+            if (wantsJson)
+                return BadRequest(new { error = ex.Message });
             return Redirect($"{FrontendConnectionsUrl}?meta_error={Uri.EscapeDataString(ex.Message)}");
         }
 
@@ -90,10 +94,16 @@ public class MetaController : ControllerBase
             }
             await _db.SaveChangesAsync(ct);
 
+            if (wantsJson)
+                return Ok(new { success = true, userName = fbName });
+
             return Redirect($"{FrontendConnectionsUrl}?meta_connected=1");
         }
         catch (Exception ex)
         {
+            if (wantsJson)
+                return StatusCode(500, new { error = ex.Message });
+
             return Redirect($"{FrontendConnectionsUrl}?meta_error={Uri.EscapeDataString(ex.Message)}");
         }
     }

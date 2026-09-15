@@ -42,8 +42,10 @@ public class GhlController : ControllerBase
     }
 
     [HttpGet("callback")]
-    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, CancellationToken ct)
+    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, [FromQuery] bool? json, CancellationToken ct)
     {
+        var wantsJson = json == true || Request.Headers.Accept.ToString().Contains("application/json");
+
         Guid tenantId;
         try
         {
@@ -51,6 +53,8 @@ public class GhlController : ControllerBase
         }
         catch (Exception ex)
         {
+            if (wantsJson)
+                return BadRequest(new { error = ex.Message });
             return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(ex.Message)}");
         }
 
@@ -75,10 +79,16 @@ public class GhlController : ControllerBase
 
             await _db.SaveChangesAsync(ct);
 
+            if (wantsJson)
+                return Ok(new { success = true, locationId = token.LocationId });
+
             return Redirect($"{FrontendConnectionsUrl}?ghl_connected=1");
         }
         catch (Exception ex)
         {
+            if (wantsJson)
+                return StatusCode(500, new { error = ex.Message });
+
             return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(ex.Message)}");
         }
     }

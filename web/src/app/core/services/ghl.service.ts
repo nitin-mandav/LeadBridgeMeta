@@ -14,6 +14,12 @@ export class GhlService {
     return this.http.get<{ url: string }>(`${this.base}/connect-url`);
   }
 
+  handleCallback(code: string, state: string): Observable<{ success: boolean; locationId?: string }> {
+    return this.http.get<{ success: boolean; locationId?: string }>(`${this.base}/callback`, {
+      params: { code, state, json: 'true' },
+    });
+  }
+
   getConnections(): Observable<GhlConnection[]> {
     return this.http.get<GhlConnection[]>(`${this.base}/connections`);
   }

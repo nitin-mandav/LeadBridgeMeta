@@ -1,0 +1,49 @@
+<div class="callback-container">
+  <div class="card callback-card">
+    @if (status() === 'processing') {
+      <div class="status-content">
+        <div class="spinner-ring">
+          <div></div><div></div><div></div><div></div>
+        </div>
+        <h2>Connecting to {{ providerName() }}</h2>
+        <p class="status-text">{{ statusMessage() }}</p>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+    }
+
+    @if (status() === 'success') {
+      <div class="status-content success">
+        <div class="status-icon success-icon">
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h2>Connection Successful!</h2>
+        <p class="status-text">{{ statusMessage() }}</p>
+        <button class="btn btn-primary mt-3" (click)="goToConnections()">
+          Go to Connections Now
+        </button>
+      </div>
+    }
+
+    @if (status() === 'error') {
+      <div class="status-content error">
+        <div class="status-icon error-icon">
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </div>
+        <h2>Connection Failed</h2>
+        <p class="error-detail">{{ errorMessage() }}</p>
+        <div class="actions">
+          <button class="btn btn-secondary" (click)="goToConnections()">
+            Return to Connections
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+</div>
