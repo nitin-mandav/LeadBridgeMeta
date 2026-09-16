@@ -23,7 +23,17 @@ export class MappingsService {
     return this.http.post<FieldMapping>(`${this.base}/fields`, request);
   }
 
+  getFormFields(formId: string): Observable<MetaFormField[]> {
+    return this.http.get<MetaFormField[]>(`${this.base}/forms/${formId}/fields`);
+  }
+
   deleteFieldMapping(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/fields/${id}`);
   }
+}
+
+export interface MetaFormField {
+  key: string;
+  label: string;
+  type?: string;
 }

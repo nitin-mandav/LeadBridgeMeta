@@ -39,23 +39,79 @@
     <table>
       <thead>
         <tr>
-          <th>Meta field key</th>
-          <th>GHL target</th>
-          <th>GHL field key</th>
-          <th></th>
+          <th style="width: 40%">Meta field key</th>
+          <th style="width: 25%">GHL target</th>
+          <th style="width: 25%">GHL field key</th>
+          <th style="width: 10%"></th>
         </tr>
       </thead>
       <tbody>
         @for (m of fieldMappings(); track m.id) {
           <tr>
-            <td>{{ m.metaFieldKey }}</td>
+            <td><code>{{ m.metaFieldKey }}</code></td>
             <td>{{ targetTypeLabels[m.targetType] }}</td>
-            <td>{{ m.ghlFieldKey }}</td>
+            <td><code>{{ m.ghlFieldKey }}</code></td>
             <td><button class="btn btn-secondary" (click)="deleteFieldMapping(m)">Remove</button></td>
           </tr>
         }
         <tr>
-          <td><input [(ngModel)]="newFieldKey" placeholder="e.g. what_city_are_you_in" /></td>
+          <td>
+            <div class="searchable-dropdown-container">
+              <div class="input-with-icon">
+                <input
+                  type="text"
+                  [(ngModel)]="newFieldKey"
+                  placeholder="Select question or type key…"
+                  (focus)="openFieldDropdown()"
+                  (click)="openFieldDropdown()"
+                  (blur)="closeFieldDropdown()"
+                  autocomplete="off"
+                />
+                <button
+                  type="button"
+                  class="dropdown-toggle-btn"
+                  (mousedown)="$event.preventDefault(); toggleFieldDropdown()"
+                  title="Toggle form fields list"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </div>
+
+              @if (isFieldDropdownOpen()) {
+                <div class="dropdown-panel" (mousedown)="$event.preventDefault()">
+                  @if (isLoadingFields()) {
+                    <div class="dropdown-status">Loading form questions…</div>
+                  } @else if (filteredMetaFields().length === 0) {
+                    <div class="dropdown-status">
+                      <span>No matching form fields.</span>
+                      @if (newFieldKey) {
+                        <span class="custom-note">Press "Add" to use "<strong>{{ newFieldKey }}</strong>" as custom key</span>
+                      }
+                    </div>
+                  } @else {
+                    <div class="dropdown-header">
+                      <span>Form Questions ({{ filteredMetaFields().length }})</span>
+                    </div>
+                    <ul class="dropdown-list">
+                      @for (f of filteredMetaFields(); track f.key) {
+                        <li class="dropdown-item" (click)="selectMetaField(f)">
+                          <div class="item-main">
+                            <span class="item-label">{{ f.label }}</span>
+                            <span class="item-key">{{ f.key }}</span>
+                          </div>
+                          @if (f.type) {
+                            <span class="item-type-badge">{{ f.type }}</span>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+            </div>
+          </td>
           <td>
             <select [(ngModel)]="newTargetType">
               @for (t of targetTypes; track t) {
