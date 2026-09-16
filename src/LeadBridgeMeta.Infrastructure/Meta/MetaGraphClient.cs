@@ -135,11 +135,15 @@ public class MetaGraphClient : IMetaGraphClient
         if (form.Questions is null || form.Questions.Count == 0)
             return [];
 
-        return form.Questions.Select(q => new MetaFormQuestionDto(
-            Key: string.IsNullOrWhiteSpace(q.Key) ? (q.Type?.ToLowerInvariant() ?? q.Label ?? "unknown") : q.Key,
-            Label: string.IsNullOrWhiteSpace(q.Label) ? (q.Key ?? q.Type ?? "Question") : q.Label,
-            Type: q.Type
-        )).ToList();
+        return form.Questions.Select(q =>
+        {
+            var effectiveKey = !string.IsNullOrWhiteSpace(q.Key) ? q.Key : (!string.IsNullOrWhiteSpace(q.FieldKey) ? q.FieldKey : (q.Type?.ToLowerInvariant() ?? q.Label ?? "unknown"));
+            return new MetaFormQuestionDto(
+                Key: effectiveKey,
+                Label: string.IsNullOrWhiteSpace(q.Label) ? effectiveKey : q.Label,
+                Type: q.Type
+            );
+        }).ToList();
     }
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
@@ -156,12 +160,13 @@ public class MetaGraphClient : IMetaGraphClient
 
     private record FormQuestionResponse(
         [property: JsonPropertyName("key")] string? Key,
+        [property: JsonPropertyName("field_key")] string? FieldKey,
         [property: JsonPropertyName("label")] string? Label,
         [property: JsonPropertyName("type")] string? Type);
 
     private record LeadFormDetailResponse(
-        string Id,
-        string? Name,
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("name")] string? Name,
         [property: JsonPropertyName("questions")] List<FormQuestionResponse>? Questions);
 
     private record LeadFieldDataResponse(string Name, List<string> Values);
