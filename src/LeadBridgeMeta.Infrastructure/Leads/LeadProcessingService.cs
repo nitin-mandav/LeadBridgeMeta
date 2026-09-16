@@ -169,7 +169,9 @@ public class LeadProcessingService : ILeadProcessingService
 
     private static GhlContactUpsertRequest BuildGhlRequest(string locationId, MetaLeadDataDto lead, List<FieldMapping> mappings)
     {
-        string? firstName = null, lastName = null, email = null, phone = null;
+        string? firstName = null, lastName = null, name = null, email = null, phone = null;
+        string? companyName = null, address1 = null, city = null, state = null, postalCode = null;
+        string? country = null, website = null, dateOfBirth = null;
         var customFields = new Dictionary<string, string>();
         var tags = new List<string>();
 
@@ -185,7 +187,7 @@ public class LeadProcessingService : ILeadProcessingService
                 switch (explicitMapping.TargetType)
                 {
                     case GhlTargetFieldType.StandardContactField:
-                        AssignStandard(explicitMapping.GhlFieldKey, value, ref firstName, ref lastName, ref email, ref phone);
+                        AssignStandard(explicitMapping.GhlFieldKey, value, ref firstName, ref lastName, ref name, ref email, ref phone, ref companyName, ref address1, ref city, ref state, ref postalCode, ref country, ref website, ref dateOfBirth);
                         break;
                     case GhlTargetFieldType.CustomField:
                         customFields[explicitMapping.GhlFieldKey] = value;
@@ -199,7 +201,7 @@ public class LeadProcessingService : ILeadProcessingService
 
             if (DefaultStandardFieldMap.TryGetValue(field.Name, out var standardKey))
             {
-                AssignStandard(standardKey, value, ref firstName, ref lastName, ref email, ref phone);
+                AssignStandard(standardKey, value, ref firstName, ref lastName, ref name, ref email, ref phone, ref companyName, ref address1, ref city, ref state, ref postalCode, ref country, ref website, ref dateOfBirth);
                 continue;
             }
 
@@ -208,6 +210,7 @@ public class LeadProcessingService : ILeadProcessingService
                 var parts = value.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
                 firstName = parts.ElementAtOrDefault(0);
                 lastName = parts.ElementAtOrDefault(1);
+                name = value;
                 continue;
             }
 
@@ -215,17 +218,65 @@ public class LeadProcessingService : ILeadProcessingService
             customFields[field.Name] = value;
         }
 
-        return new GhlContactUpsertRequest(locationId, firstName, lastName, email, phone, customFields, tags, SourceLabel: "Meta Lead Ads");
+        return new GhlContactUpsertRequest(
+            LocationId: locationId,
+            FirstName: firstName,
+            LastName: lastName,
+            Name: name,
+            Email: email,
+            Phone: phone,
+            CompanyName: companyName,
+            Address1: address1,
+            City: city,
+            State: state,
+            PostalCode: postalCode,
+            Country: country,
+            Website: website,
+            DateOfBirth: dateOfBirth,
+            CustomFields: customFields,
+            Tags: tags,
+            SourceLabel: "Meta Lead Ads");
     }
 
-    private static void AssignStandard(string standardKey, string value, ref string? firstName, ref string? lastName, ref string? email, ref string? phone)
+    private static void AssignStandard(
+        string standardKey,
+        string value,
+        ref string? firstName,
+        ref string? lastName,
+        ref string? name,
+        ref string? email,
+        ref string? phone,
+        ref string? companyName,
+        ref string? address1,
+        ref string? city,
+        ref string? state,
+        ref string? postalCode,
+        ref string? country,
+        ref string? website,
+        ref string? dateOfBirth)
     {
-        switch (standardKey)
+        var normalized = standardKey.ToLowerInvariant().Replace("contact.", "").Replace("_", "");
+        switch (normalized)
         {
-            case "firstName": firstName = value; break;
-            case "lastName": lastName = value; break;
+            case "firstname": firstName = value; break;
+            case "lastname": lastName = value; break;
+            case "name":
+            case "fullname": name = value; break;
             case "email": email = value; break;
             case "phone": phone = value; break;
+            case "companyname": companyName = value; break;
+            case "address1":
+            case "address":
+            case "street": address1 = value; break;
+            case "city": city = value; break;
+            case "state": state = value; break;
+            case "postalcode":
+            case "zip":
+            case "zipcode": postalCode = value; break;
+            case "country": country = value; break;
+            case "website": website = value; break;
+            case "dateofbirth":
+            case "dob": dateOfBirth = value; break;
         }
     }
 

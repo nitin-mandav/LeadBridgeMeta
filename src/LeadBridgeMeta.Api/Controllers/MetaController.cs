@@ -155,4 +155,114 @@ public class MetaController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return NoContent();
     }
+
+    [HttpPost("pages/{pageId:guid}/unsubscribe"), Authorize]
+    public async Task<IActionResult> UnsubscribePage(Guid pageId, [FromServices] ICurrentUserContext currentUser, CancellationToken ct)
+    {
+        var page = await _db.MetaPages
+            .Include(p => p.MetaConnection)
+            .FirstOrDefaultAsync(p => p.Id == pageId && p.MetaConnection!.TenantId == currentUser.TenantId, ct);
+        if (page is null) return NotFound();
+
+        var pageToken = _protector.Unprotect(page.EncryptedPageAccessToken);
+        try
+        {
+            await _meta.UnsubscribePageFromLeadgenAsync(page.PageId, pageToken, ct);
+        }
+        catch
+        {
+            // Local flag is cleared even if Meta API call fails
+        }
+
+        page.IsLeadgenWebhookSubscribed = false;
+        page.SubscribedAtUtc = null;
+
+        // Delete forms and associated mappings/events for this page from db
+        var forms = await _db.MetaLeadForms
+            .Where(f => f.MetaPageId == page.Id)
+            .ToListAsync(ct);
+
+        if (forms.Count > 0)
+        {
+            var formIds = forms.Select(f => f.Id).ToList();
+
+            var events = await _db.LeadEvents
+                .Where(e => formIds.Contains(e.MetaLeadFormId))
+                .ToListAsync(ct);
+            if (events.Count > 0)
+            {
+                _db.LeadEvents.RemoveRange(events);
+            }
+
+            var mappings = await _db.FieldMappings
+                .Where(m => m.MetaLeadFormId.HasValue && formIds.Contains(m.MetaLeadFormId.Value))
+                .ToListAsync(ct);
+            if (mappings.Count > 0)
+            {
+                _db.FieldMappings.RemoveRange(mappings);
+            }
+
+            _db.MetaLeadForms.RemoveRange(forms);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpPost("pages/{pageId:guid}/sync"), Authorize]
+    public async Task<IActionResult> SyncPageForms(Guid pageId, [FromServices] ICurrentUserContext currentUser, CancellationToken ct)
+    {
+        var page = await _db.MetaPages
+            .Include(p => p.MetaConnection)
+            .FirstOrDefaultAsync(p => p.Id == pageId && p.MetaConnection!.TenantId == currentUser.TenantId, ct);
+        if (page is null) return NotFound();
+
+        var pageToken = _protector.Unprotect(page.EncryptedPageAccessToken);
+
+        if (page.IsLeadgenWebhookSubscribed)
+        {
+            try
+            {
+                await _meta.SubscribePageToLeadgenAsync(page.PageId, pageToken, ct);
+            }
+            catch
+            {
+                // Continue form sync even if resubscribe check fails
+            }
+        }
+
+        var forms = await _meta.GetLeadFormsAsync(page.PageId, pageToken, ct);
+        foreach (var f in forms)
+        {
+            var existingForm = await _db.MetaLeadForms.FirstOrDefaultAsync(mf => mf.FormId == f.FormId, ct);
+            if (existingForm is null)
+            {
+                existingForm = new MetaLeadForm { MetaPageId = page.Id, FormId = f.FormId };
+                _db.MetaLeadForms.Add(existingForm);
+            }
+            existingForm.FormName = f.FormName;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpDelete("connections/{connectionId:guid}"), Authorize]
+    public async Task<IActionResult> DisconnectConnection(
+        Guid connectionId,
+        [FromServices] ICurrentUserContext currentUser,
+        CancellationToken ct)
+    {
+        var connection = await _db.MetaConnections
+            .Include(c => c.Pages)
+                .ThenInclude(p => p.LeadForms)
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.TenantId == currentUser.TenantId, ct);
+
+        if (connection is null)
+            return NotFound(new { error = "Meta connection not found or already removed." });
+
+        _db.MetaConnections.Remove(connection);
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { success = true, message = "Meta account disconnected successfully." });
+    }
 }

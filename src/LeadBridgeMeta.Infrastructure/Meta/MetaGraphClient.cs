@@ -101,6 +101,13 @@ public class MetaGraphClient : IMetaGraphClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task UnsubscribePageFromLeadgenAsync(string pageId, string pageAccessToken, CancellationToken ct = default)
+    {
+        var url = $"{pageId}/subscribed_apps?access_token={Uri.EscapeDataString(pageAccessToken)}";
+        using var response = await _http.DeleteAsync(url, ct);
+        // We do not throw if already unsubscribed or not found
+    }
+
     public async Task<MetaLeadDataDto> GetLeadDataAsync(string leadgenId, string pageAccessToken, CancellationToken ct = default)
     {
         var url = $"{leadgenId}?fields=id,form_id,created_time,field_data,ad_id&access_token={Uri.EscapeDataString(pageAccessToken)}";

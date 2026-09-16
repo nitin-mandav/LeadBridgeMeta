@@ -38,7 +38,18 @@ public class GhlController : ControllerBase
     {
         var wantsJson = json == true || Request.Headers.Accept.ToString().Contains("application/json");
 
-        var result = await _ghlService.ProcessOAuthCallbackAsync(code, state, CallbackRedirectUri, ct);
+        // Dynamically resolve redirect URI from the incoming request path so token exchange matches whichever endpoint was called
+        var effectiveRedirectUri = $"{Request.Scheme}://{Request.Host}{Request.Path}";
+        var result = await _ghlService.ProcessOAuthCallbackAsync(code, state, effectiveRedirectUri, ct);
+
+        if (!result.Success)
+        {
+            // Fallback retry with configured CallbackRedirectUri if there was a URI mismatch
+            if (effectiveRedirectUri != CallbackRedirectUri)
+            {
+                result = await _ghlService.ProcessOAuthCallbackAsync(code, state, CallbackRedirectUri, ct);
+            }
+        }
 
         if (!result.Success)
         {
@@ -60,5 +71,28 @@ public class GhlController : ControllerBase
         var connections = await _ghlService.GetConnectionsAsync(currentUser.TenantId, ct);
         var response = connections.Select(c => new GhlConnectionResponse(c.Id, c.LocationId, c.LocationName, c.AccessTokenExpiresAtUtc)).ToList();
         return Ok(response);
+    }
+
+    [HttpGet("connections/{connectionId:guid}/fields"), Authorize]
+    public async Task<ActionResult<List<GhlFieldOptionDto>>> GetLocationFields(
+        Guid connectionId,
+        [FromServices] ICurrentUserContext currentUser,
+        CancellationToken ct)
+    {
+        var fields = await _ghlService.GetLocationFieldsAsync(connectionId, currentUser.TenantId, ct);
+        return Ok(fields);
+    }
+
+    [HttpDelete("connections/{connectionId:guid}"), Authorize]
+    public async Task<IActionResult> Disconnect(
+        Guid connectionId,
+        [FromServices] ICurrentUserContext currentUser,
+        CancellationToken ct)
+    {
+        var success = await _ghlService.DisconnectAsync(connectionId, currentUser.TenantId, ct);
+        if (!success)
+            return NotFound(new { error = "Connection not found or already removed." });
+
+        return Ok(new { success = true, message = "GoHighLevel connection disconnected successfully." });
     }
 }
