@@ -1,4 +1,5 @@
 using LeadBridgeMeta.Application.Common;
+using LeadBridgeMeta.Application.Meta;
 using LeadBridgeMeta.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace LeadBridgeMeta.Api.Controllers;
 public record SetFormGhlConnectionRequest(Guid GhlConnectionId);
 public record FieldMappingRequest(Guid? MetaLeadFormId, string MetaFieldKey, GhlTargetFieldType TargetType, string GhlFieldKey);
 public record FieldMappingResponse(Guid Id, Guid? MetaLeadFormId, string MetaFieldKey, GhlTargetFieldType TargetType, string GhlFieldKey);
+public record MetaFormQuestionResponse(string Key, string Label, string? Type);
 
 [ApiController]
 [Route("api/mappings")]
@@ -41,6 +43,69 @@ public class MappingsController : ControllerBase
         form.GhlConnectionId = ghlConnection.Id;
         await _db.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    [HttpGet("forms/{formId:guid}/fields")]
+    public async Task<ActionResult<List<MetaFormQuestionResponse>>> GetFormFields(
+        Guid formId,
+        [FromServices] IMetaGraphClient meta,
+        [FromServices] ITokenProtector protector,
+        CancellationToken ct)
+    {
+        var form = await _db.MetaLeadForms
+            .Include(f => f.MetaPage).ThenInclude(p => p!.MetaConnection)
+            .FirstOrDefaultAsync(f => f.Id == formId, ct);
+
+        if (form is null || form.MetaPage?.MetaConnection?.TenantId != _currentUser.TenantId)
+            return NotFound();
+
+        var fields = new List<MetaFormQuestionResponse>();
+        if (!string.IsNullOrEmpty(form.MetaPage?.EncryptedPageAccessToken))
+        {
+            try
+            {
+                var pageToken = protector.Unprotect(form.MetaPage.EncryptedPageAccessToken);
+                var questions = await meta.GetLeadFormQuestionsAsync(form.FormId, pageToken, ct);
+                fields.AddRange(questions.Select(q => new MetaFormQuestionResponse(q.Key, q.Label, q.Type)));
+            }
+            catch
+            {
+                // Fall back gracefully if Meta API call fails or token expired
+            }
+        }
+
+        if (fields.Count == 0)
+        {
+            fields.AddRange([
+                new("full_name", "Full Name", "FULL_NAME"),
+                new("first_name", "First Name", "FIRST_NAME"),
+                new("last_name", "Last Name", "LAST_NAME"),
+                new("email", "Email", "EMAIL"),
+                new("phone_number", "Phone Number", "PHONE"),
+                new("city", "City", "CITY"),
+                new("street_address", "Street Address", "STREET_ADDRESS"),
+                new("state", "State", "STATE"),
+                new("zip_code", "Zip Code", "ZIP_CODE"),
+                new("country", "Country", "COUNTRY"),
+                new("company_name", "Company Name", "COMPANY_NAME"),
+                new("job_title", "Job Title", "JOB_TITLE"),
+            ]);
+        }
+
+        var existingMappedKeys = await _db.FieldMappings
+            .Where(m => m.MetaLeadFormId == formId)
+            .Select(m => m.MetaFieldKey)
+            .ToListAsync(ct);
+
+        foreach (var k in existingMappedKeys)
+        {
+            if (!fields.Any(f => f.Key.Equals(k, StringComparison.OrdinalIgnoreCase)))
+            {
+                fields.Add(new(k, k, "CUSTOM"));
+            }
+        }
+
+        return Ok(fields);
     }
 
     [HttpGet("fields")]

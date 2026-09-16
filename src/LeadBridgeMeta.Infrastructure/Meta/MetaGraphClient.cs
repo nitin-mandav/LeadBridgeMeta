@@ -128,6 +128,20 @@ public class MetaGraphClient : IMetaGraphClient
                ?? throw new MetaGraphApiException("Meta Graph API returned an empty/invalid response.");
     }
 
+    public async Task<IReadOnlyList<MetaFormQuestionDto>> GetLeadFormQuestionsAsync(string formId, string pageAccessToken, CancellationToken ct = default)
+    {
+        var url = $"{formId}?fields=id,name,questions&access_token={Uri.EscapeDataString(pageAccessToken)}";
+        var form = await GetAsync<LeadFormDetailResponse>(url, ct);
+        if (form.Questions is null || form.Questions.Count == 0)
+            return [];
+
+        return form.Questions.Select(q => new MetaFormQuestionDto(
+            Key: string.IsNullOrWhiteSpace(q.Key) ? (q.Type?.ToLowerInvariant() ?? q.Label ?? "unknown") : q.Key,
+            Label: string.IsNullOrWhiteSpace(q.Label) ? (q.Key ?? q.Type ?? "Question") : q.Label,
+            Type: q.Type
+        )).ToList();
+    }
+
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     private record TokenResponse(
@@ -139,6 +153,16 @@ public class MetaGraphClient : IMetaGraphClient
     private record PageResponse(string Id, string Name, [property: JsonPropertyName("access_token")] string AccessToken);
 
     private record LeadFormResponse(string Id, string Name, string? Status);
+
+    private record FormQuestionResponse(
+        [property: JsonPropertyName("key")] string? Key,
+        [property: JsonPropertyName("label")] string? Label,
+        [property: JsonPropertyName("type")] string? Type);
+
+    private record LeadFormDetailResponse(
+        string Id,
+        string? Name,
+        [property: JsonPropertyName("questions")] List<FormQuestionResponse>? Questions);
 
     private record LeadFieldDataResponse(string Name, List<string> Values);
 

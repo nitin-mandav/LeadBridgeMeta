@@ -36,4 +36,7 @@ public interface IMetaGraphClient
     Task SubscribePageToLeadgenAsync(string pageId, string pageAccessToken, CancellationToken ct = default);
 
     Task<MetaLeadDataDto> GetLeadDataAsync(string leadgenId, string pageAccessToken, CancellationToken ct = default);
+    Task<IReadOnlyList<MetaFormQuestionDto>> GetLeadFormQuestionsAsync(string formId, string pageAccessToken, CancellationToken ct = default);
 }
+
+public record MetaFormQuestionDto(string Key, string Label, string? Type);
