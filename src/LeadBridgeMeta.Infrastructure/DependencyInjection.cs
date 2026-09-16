@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserContext, HttpCurrentUserContext>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<ILeadProcessingService, LeadProcessingService>();
+        services.AddScoped<IGhlConnectionService, GhlConnectionService>();
 
         services.AddSingleton<IMetaWebhookQueue, MetaWebhookQueue>();
         services.AddHostedService<MetaWebhookProcessingWorker>();
