@@ -2,127 +2,232 @@
 <p class="page-subtitle">Pick a Meta lead form, send it to a GHL location, and map each question to a GHL field.</p>
 
 @if (formOptions().length === 0) {
-  <div class="card">
-    <p class="empty-state">No Meta lead forms found yet. Connect a Meta Page and subscribe it under Connections first.</p>
-  </div>
+<div class="card" style="text-align: center; padding: 2.5rem 1.5rem;">
+  <p class="empty-state" style="margin-bottom: 1.25rem; font-size: 1rem;">
+    No Meta lead forms found yet. Please connect your accounts and subscribe your Facebook Page under Connections first.
+  </p>
+  <a routerLink="/connections" class="btn btn-primary" style="display: inline-flex;">
+    Go to Connections
+  </a>
+</div>
 } @else {
-  <div class="card section">
-    <div class="field">
-      <label for="formSelect">Meta lead form</label>
-      <select id="formSelect" [ngModel]="selectedFormId()" (ngModelChange)="selectForm($event)">
-        @for (opt of formOptions(); track opt.form.id) {
-          <option [value]="opt.form.id">{{ opt.pageName }} — {{ opt.form.formName }}</option>
+<div class="card section">
+  <div class="field">
+    <label for="formSelect">Meta lead form</label>
+    <select id="formSelect" [ngModel]="selectedFormId()" (ngModelChange)="selectForm($event)">
+      @for (opt of formOptions(); track opt.form.id) {
+      <option [value]="opt.form.id">{{ opt.pageName }} — {{ opt.form.formName }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="ghlSelect">Send leads to GHL location</label>
+    <div class="inline">
+      <select id="ghlSelect" [ngModel]="selectedGhlConnectionId()" (ngModelChange)="onGhlConnectionChange($event)">
+        <option value="" disabled>Select a location…</option>
+        @for (c of ghlConnections(); track c.id) {
+        <option [value]="c.id">{{ c.locationName }}</option>
         }
       </select>
-    </div>
-
-    <div class="field">
-      <label for="ghlSelect">Send leads to GHL location</label>
-      <div class="inline">
-        <select id="ghlSelect" [(ngModel)]="selectedGhlConnectionId">
-          <option value="" disabled>Select a location…</option>
-          @for (c of ghlConnections(); track c.id) {
-            <option [value]="c.id">{{ c.locationName }}</option>
-          }
-        </select>
-        <button class="btn btn-primary" [disabled]="isSavingLocation() || !selectedGhlConnectionId()" (click)="saveGhlConnection()">
-          {{ isSavingLocation() ? 'Saving…' : 'Save' }}
-        </button>
-      </div>
+      <button class="btn btn-primary" [disabled]="isSavingLocation() || !selectedGhlConnectionId()"
+        (click)="saveGhlConnection()">
+        {{ isSavingLocation() ? 'Saving…' : 'Save' }}
+      </button>
     </div>
   </div>
+</div>
 
-  <div class="card section">
-    <h2>Field mappings for this form</h2>
-    <p class="muted">Common fields (email, name, phone) map automatically. Add rows below for custom questions or tags.</p>
+<div class="card section">
+  <h2>Field mappings for this form</h2>
+  <p class="muted">Common fields (email, name, phone) map automatically. Add rows below for custom questions or tags.
+  </p>
 
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 40%">Meta field key</th>
-          <th style="width: 25%">GHL target</th>
-          <th style="width: 25%">GHL field key</th>
-          <th style="width: 10%"></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (m of fieldMappings(); track m.id) {
-          <tr>
-            <td><code>{{ m.metaFieldKey }}</code></td>
-            <td>{{ targetTypeLabels[m.targetType] }}</td>
-            <td><code>{{ m.ghlFieldKey }}</code></td>
-            <td><button class="btn btn-secondary" (click)="deleteFieldMapping(m)">Remove</button></td>
-          </tr>
-        }
-        <tr>
-          <td>
-            <div class="searchable-dropdown-container">
-              <div class="input-with-icon">
-                <input
-                  type="text"
-                  [(ngModel)]="newFieldKey"
-                  placeholder="Select question or type key…"
-                  (focus)="openFieldDropdown()"
-                  (click)="openFieldDropdown()"
-                  (blur)="closeFieldDropdown()"
-                  autocomplete="off"
-                />
-                <button
-                  type="button"
-                  class="dropdown-toggle-btn"
-                  (mousedown)="$event.preventDefault(); toggleFieldDropdown()"
-                  title="Toggle form fields list"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40%">Meta field key</th>
+        <th style="width: 25%">GHL target</th>
+        <th style="width: 25%">GHL field key</th>
+        <th style="width: 10%"></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (m of fieldMappings(); track m.id) {
+      <tr>
+        <td><code>{{ m.metaFieldKey }}</code></td>
+        <td>{{ targetTypeLabels[m.targetType] }}</td>
+        <td><code>{{ m.ghlFieldKey }}</code></td>
+        <td><button class="btn btn-secondary" (click)="deleteFieldMapping(m)">Remove</button></td>
+      </tr>
+      }
+      <tr>
+        <td>
+          <div class="searchable-dropdown-container meta-field-autocomplete">
+            <div class="input-with-icon" [class.has-clear]="!!newFieldKey()">
+              <input type="text"
+                [ngModel]="newFieldKey()"
+                (ngModelChange)="onMetaInput($event)"
+                placeholder="Select question or type key…"
+                (focus)="openFieldDropdown(); $any($event.target).select()"
+                (click)="openFieldDropdown()"
+                (keydown)="onMetaKeyDown($event)"
+                autocomplete="off" />
+
+              @if (newFieldKey()) {
+              <button type="button" class="clear-btn" (click)="clearMetaInput(); $event.stopPropagation()" title="Clear text">
+                ✕
+              </button>
+              }
+
+              <button type="button" class="dropdown-toggle-btn"
+                (mousedown)="$event.preventDefault(); toggleFieldDropdown()" title="Toggle form fields list">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+
+            @if (isFieldDropdownOpen()) {
+            <div class="dropdown-panel" (mousedown)="$event.preventDefault()">
+              @if (isLoadingFields()) {
+              <div class="dropdown-status">Loading form questions…</div>
+              } @else if (filteredMetaFields().length === 0) {
+              <div class="dropdown-status">
+                <span>No matching form fields.</span>
+                @if (newFieldKey()) {
+                <span class="custom-note">Press "Add" to use "<strong>{{ newFieldKey() }}</strong>" as custom key</span>
+                }
+              </div>
+              } @else {
+              <div class="dropdown-header">
+                <span>Form Questions ({{ filteredMetaFields().length }})</span>
+              </div>
+              <ul class="dropdown-list">
+                @for (f of filteredMetaFields(); track f.key; let i = $index) {
+                <li class="dropdown-item"
+                    [id]="'meta-opt-' + i"
+                    [class.highlighted]="i === highlightedMetaIndex()"
+                    (click)="selectMetaField(f)"
+                    (mouseenter)="highlightedMetaIndex.set(i)">
+                  <div class="item-main">
+                    <span class="item-label">{{ f.label }}</span>
+                    <span class="item-key">{{ f.key }}</span>
+                  </div>
+                  @if (f.type) {
+                  <span class="item-type-badge">{{ f.type }}</span>
+                  }
+                </li>
+                }
+              </ul>
+              }
+            </div>
+            }
+          </div>
+        </td>
+        <td>
+          <select [(ngModel)]="newTargetType">
+            @for (t of targetTypes; track t) {
+            <option [value]="t">{{ targetTypeLabels[t] }}</option>
+            }
+          </select>
+        </td>
+        <td>
+          <div class="searchable-dropdown-container ghl-field-autocomplete">
+            <div class="input-with-icon" [class.has-clear]="!!newGhlFieldKey()">
+              <input type="text"
+                [ngModel]="newGhlFieldKey()"
+                (ngModelChange)="onGhlInput($event)"
+                placeholder="Select GHL field or type key…"
+                (focus)="openGhlDropdown(); $any($event.target).select()"
+                (click)="openGhlDropdown()"
+                (keydown)="onGhlKeyDown($event)"
+                autocomplete="off" />
+
+              @if (newGhlFieldKey()) {
+              <button type="button" class="clear-btn" (click)="clearGhlInput(); $event.stopPropagation()" title="Clear text">
+                ✕
+              </button>
+              }
+
+              <button type="button" class="dropdown-toggle-btn"
+                (mousedown)="$event.preventDefault(); toggleGhlDropdown()" title="Toggle GHL fields list">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+
+            @if (isGhlDropdownOpen()) {
+            <div class="dropdown-panel dropdown-panel-right" (mousedown)="$event.preventDefault()">
+              @if (isLoadingGhlFields()) {
+              <div class="dropdown-status">Loading GHL fields…</div>
+              } @else if (ghlLocationFields().length === 0) {
+              <div class="dropdown-status">
+                <span>No GHL fields loaded for this location.</span>
+                @if (newGhlFieldKey()) {
+                <span class="custom-note">Press "Add" to use "<strong>{{ newGhlFieldKey() }}</strong>"</span>
+                }
+              </div>
+              } @else {
+              <!-- Category Filter Tabs -->
+              <div class="category-tabs">
+                <button type="button" class="cat-tab"
+                  [class.active]="activeGhlCategory() === 'All'"
+                  (click)="setGhlCategory('All')">
+                  All ({{ ghlTotalCount() }})
+                </button>
+                <button type="button" class="cat-tab"
+                  [class.active]="activeGhlCategory() === 'Contact'"
+                  (click)="setGhlCategory('Contact')">
+                  Contact ({{ ghlContactCount() }})
+                </button>
+                <button type="button" class="cat-tab"
+                  [class.active]="activeGhlCategory() === 'Opportunity'"
+                  (click)="setGhlCategory('Opportunity')">
+                  Opportunity ({{ ghlOpportunityCount() }})
                 </button>
               </div>
 
-              @if (isFieldDropdownOpen()) {
-                <div class="dropdown-panel" (mousedown)="$event.preventDefault()">
-                  @if (isLoadingFields()) {
-                    <div class="dropdown-status">Loading form questions…</div>
-                  } @else if (filteredMetaFields().length === 0) {
-                    <div class="dropdown-status">
-                      <span>No matching form fields.</span>
-                      @if (newFieldKey) {
-                        <span class="custom-note">Press "Add" to use "<strong>{{ newFieldKey }}</strong>" as custom key</span>
-                      }
-                    </div>
-                  } @else {
-                    <div class="dropdown-header">
-                      <span>Form Questions ({{ filteredMetaFields().length }})</span>
-                    </div>
-                    <ul class="dropdown-list">
-                      @for (f of filteredMetaFields(); track f.key) {
-                        <li class="dropdown-item" (click)="selectMetaField(f)">
-                          <div class="item-main">
-                            <span class="item-label">{{ f.label }}</span>
-                            <span class="item-key">{{ f.key }}</span>
-                          </div>
-                          @if (f.type) {
-                            <span class="item-type-badge">{{ f.type }}</span>
-                          }
-                        </li>
-                      }
-                    </ul>
-                  }
-                </div>
+              @if (filteredGhlFields().length === 0) {
+              <div class="dropdown-status">
+                <span>No matching GHL fields.</span>
+                @if (newGhlFieldKey()) {
+                <span class="custom-note">Press "Add" to use "<strong>{{ newGhlFieldKey() }}</strong>"</span>
+                }
+              </div>
+              } @else {
+              <ul class="dropdown-list">
+                @for (f of filteredGhlFields(); track f.key; let i = $index) {
+                <li class="dropdown-item"
+                    [id]="'ghl-opt-' + i"
+                    [class.highlighted]="i === highlightedGhlIndex()"
+                    (click)="selectGhlField(f)"
+                    (mouseenter)="highlightedGhlIndex.set(i)">
+                  <div class="item-main">
+                    <span class="item-label">{{ f.label }}</span>
+                    <span class="item-key">{{ f.key }}</span>
+                  </div>
+                  <div class="badges-group">
+                    @if (f.category) {
+                    <span class="category-badge" [attr.data-cat]="f.category">{{ f.category }}</span>
+                    }
+                    <span class="item-type-badge" [class.badge-standard]="f.isStandard">
+                      {{ f.isStandard ? 'Standard' : (f.dataType || 'Custom') }}
+                    </span>
+                  </div>
+                </li>
+                }
+              </ul>
+              }
               }
             </div>
-          </td>
-          <td>
-            <select [(ngModel)]="newTargetType">
-              @for (t of targetTypes; track t) {
-                <option [value]="t">{{ targetTypeLabels[t] }}</option>
-              }
-            </select>
-          </td>
-          <td><input [(ngModel)]="newGhlFieldKey" placeholder="GHL field id / tag value" /></td>
-          <td><button class="btn btn-primary" (click)="addFieldMapping()">Add</button></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+            }
+          </div>
+        </td>
+        <td><button class="btn btn-primary" (click)="addFieldMapping()">Add</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 }

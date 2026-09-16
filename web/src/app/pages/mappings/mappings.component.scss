@@ -31,7 +31,8 @@ table {
   width: 100%;
   border-collapse: collapse;
 
-  th, td {
+  th,
+  td {
     padding: 0.75rem 0.5rem;
     text-align: left;
     vertical-align: middle;
@@ -77,6 +78,32 @@ td select {
       padding-right: 2rem;
     }
 
+    &.has-clear input {
+      padding-right: 3.2rem;
+    }
+
+    .clear-btn {
+      position: absolute;
+      right: 1.75rem;
+      background: none;
+      border: none;
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+    }
+
     .dropdown-toggle-btn {
       position: absolute;
       right: 0.35rem;
@@ -89,6 +116,7 @@ td select {
       align-items: center;
       justify-content: center;
       border-radius: 4px;
+      transition: color 0.15s ease, background 0.15s ease;
 
       &:hover {
         color: var(--color-text);
@@ -101,16 +129,47 @@ td select {
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    width: max(320px, 100%);
-    max-height: 250px;
+    width: max(340px, 100%);
+    max-height: 280px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
     z-index: 100;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+
+    .category-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+
+      .cat-tab {
+        border: none;
+        background: transparent;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.74rem;
+        font-weight: 500;
+        cursor: pointer;
+        color: var(--color-text-muted);
+        transition: all 0.12s ease;
+
+        &:hover {
+          background: rgba(0, 0, 0, 0.05);
+          color: var(--color-text);
+        }
+
+        &.active {
+          background: var(--color-primary);
+          color: #ffffff;
+          font-weight: 600;
+        }
+      }
+    }
 
     .dropdown-header {
       padding: 0.45rem 0.75rem;
@@ -148,11 +207,12 @@ td select {
         justify-content: space-between;
         padding: 0.5rem 0.75rem;
         cursor: pointer;
-        transition: background 0.12s ease;
+        transition: background 0.1s ease;
         gap: 0.5rem;
 
-        &:hover {
-          background: #f1f5f9;
+        &:hover,
+        &.highlighted {
+          background: #eff6ff;
         }
 
         .item-main {
@@ -180,17 +240,66 @@ td select {
           }
         }
 
-        .item-type-badge {
-          font-size: 0.65rem;
-          padding: 0.15rem 0.35rem;
-          border-radius: 4px;
-          background: rgba(37, 99, 235, 0.1);
-          color: var(--color-primary);
-          font-weight: 600;
-          text-transform: uppercase;
-          white-space: nowrap;
+        .badges-group {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          flex-shrink: 0;
+
+          .category-badge {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 600;
+            white-space: nowrap;
+            background: #e2e8f0;
+            color: #475569;
+
+            &[data-cat="Contact"] {
+              background: rgba(37, 99, 235, 0.12);
+              color: #2563eb;
+            }
+
+            &[data-cat="Opportunity"],
+            &[data-cat="Pipeline"],
+            &[data-cat="Pipeline Stage"] {
+              background: rgba(245, 158, 11, 0.15);
+              color: #d97706;
+            }
+
+            &[data-cat="Custom Field"] {
+              background: rgba(139, 92, 246, 0.12);
+              color: #7c3aed;
+            }
+
+            &[data-cat="Tag"] {
+              background: rgba(99, 102, 241, 0.12);
+              color: #4f46e5;
+            }
+          }
+
+          .item-type-badge {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            background: rgba(37, 99, 235, 0.08);
+            color: var(--color-primary);
+            font-weight: 600;
+            text-transform: uppercase;
+            white-space: nowrap;
+
+            &.badge-standard {
+              background: rgba(16, 185, 129, 0.12);
+              color: #059669;
+            }
+          }
         }
       }
+    }
+
+    &.dropdown-panel-right {
+      left: auto;
+      right: 0;
     }
   }
 }

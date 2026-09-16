@@ -122,4 +122,151 @@ public class GhlConnectionService : IGhlConnectionService
             .Select(c => new GhlConnectionDto(c.Id, c.LocationId, c.LocationName, c.AccessTokenExpiresAtUtc))
             .ToListAsync(ct);
     }
+
+    private static readonly List<GhlFieldOptionDto> GhlOpportunityFields = new()
+    {
+        new GhlFieldOptionDto("opportunity.name", "Opportunity name", "Single line", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.pipeline_id", "Pipeline", "Dropdown", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.pipeline_stage_id", "Stage", "Dropdown", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.status", "Status", "Dropdown", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.monetary_value", "Lead value", "Monetary", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.assigned_to", "Owner", "Dropdown", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.source", "Opportunity source", "Single line", IsStandard: true, Category: "Opportunity"),
+        new GhlFieldOptionDto("opportunity.lost_reason", "Lost reason", "Dropdown", IsStandard: true, Category: "Opportunity")
+    };
+
+    private static readonly List<GhlFieldOptionDto> GhlContactSystemFields = new()
+    {
+        new GhlFieldOptionDto("contact.first_name", "First name", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.last_name", "Last name", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.name", "Full name", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.email", "Email", "Email", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.phone", "Phone", "Phone", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.company_name", "Business name", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.address1", "Street address", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.city", "City", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.state", "State", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.postal_code", "Postal code", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.country", "Country", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.website", "Website", "Single line", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.date_of_birth", "Date of birth", "Date", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.timezone", "Timezone", "Timezone", IsStandard: true, Category: "Contact"),
+        new GhlFieldOptionDto("contact.source", "Source", "Single line", IsStandard: true, Category: "Contact")
+    };
+
+    public async Task<List<GhlFieldOptionDto>> GetLocationFieldsAsync(Guid connectionId, Guid tenantId, CancellationToken ct = default)
+    {
+        var result = new List<GhlFieldOptionDto>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var connection = await _db.GhlConnections
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.TenantId == tenantId, ct);
+
+        if (connection != null)
+        {
+            try
+            {
+                var accessToken = _protector.Unprotect(connection.EncryptedAccessToken);
+
+                // If token is expiring soon or expired, attempt refresh
+                if (connection.AccessTokenExpiresAtUtc <= DateTime.UtcNow.AddMinutes(5) && !string.IsNullOrEmpty(connection.EncryptedRefreshToken))
+                {
+                    try
+                    {
+                        var refreshToken = _protector.Unprotect(connection.EncryptedRefreshToken);
+                        var refreshed = await _ghl.RefreshTokenAsync(refreshToken, ct);
+                        connection.EncryptedAccessToken = _protector.Protect(refreshed.AccessToken);
+                        connection.EncryptedRefreshToken = _protector.Protect(refreshed.RefreshToken);
+                        connection.AccessTokenExpiresAtUtc = refreshed.ExpiresAtUtc;
+                        await _db.SaveChangesAsync(ct);
+                        accessToken = refreshed.AccessToken;
+                    }
+                    catch (Exception refreshEx)
+                    {
+                        _logger.LogWarning(refreshEx, "Failed to refresh GHL access token for connection {ConnectionId}", connectionId);
+                    }
+                }
+
+                // 1. Fetch live custom fields directly from GHL API (e.g. asdfghjk, name1)
+                try
+                {
+                    var customFields = await _ghl.GetCustomFieldsAsync(accessToken, connection.LocationId, ct);
+                    foreach (var cf in customFields)
+                    {
+                        var cleanKey = !string.IsNullOrWhiteSpace(cf.FieldKey)
+                            ? cf.FieldKey.Replace("{{", "").Replace("}}", "").Trim()
+                            : cf.Id;
+
+                        var isOpp = string.Equals(cf.Model, "opportunity", StringComparison.OrdinalIgnoreCase);
+
+                        if (seenKeys.Add(cleanKey))
+                        {
+                            result.Add(new GhlFieldOptionDto(
+                                Key: cleanKey,
+                                Label: cf.Name,
+                                DataType: !string.IsNullOrWhiteSpace(cf.DataType) ? cf.DataType : (!string.IsNullOrWhiteSpace(cf.Model) ? cf.Model : "CUSTOM"),
+                                IsStandard: false,
+                                Category: isOpp ? "Opportunity" : "Contact"
+                            ));
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to fetch custom fields for location {LocationId}", connection.LocationId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to decrypt token for location {LocationId}", connection.LocationId);
+            }
+        }
+
+        // 2. Add Opportunity system fields matching GHL's Opportunity fields
+        foreach (var oppField in GhlOpportunityFields)
+        {
+            if (seenKeys.Add(oppField.Key))
+            {
+                result.Add(oppField);
+            }
+        }
+
+        // 3. Add Contact system fields matching GHL's Contact fields
+        foreach (var contactField in GhlContactSystemFields)
+        {
+            if (seenKeys.Add(contactField.Key))
+            {
+                result.Add(contactField);
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<bool> DisconnectAsync(Guid connectionId, Guid tenantId, CancellationToken ct = default)
+    {
+        var connection = await _db.GhlConnections
+            .FirstOrDefaultAsync(c => c.Id == connectionId && c.TenantId == tenantId, ct);
+
+        if (connection is null)
+            return false;
+
+        // Unlink any Meta lead forms referencing this GHL connection
+        var mappedForms = await _db.MetaLeadForms
+            .Where(f => f.GhlConnectionId == connectionId)
+            .ToListAsync(ct);
+
+        foreach (var form in mappedForms)
+        {
+            form.GhlConnectionId = null;
+        }
+
+        _db.GhlConnections.Remove(connection);
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation("GHL Connection {ConnectionId} (Location {LocationId}) disconnected for tenant {TenantId}.",
+            connectionId, connection.LocationId, tenantId);
+
+        return true;
+    }
 }

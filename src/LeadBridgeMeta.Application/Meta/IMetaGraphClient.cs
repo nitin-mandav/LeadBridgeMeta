@@ -35,6 +35,9 @@ public interface IMetaGraphClient
     /// <summary>Subscribes the page to the "leadgen" webhook field so new form submissions are pushed to our webhook.</summary>
     Task SubscribePageToLeadgenAsync(string pageId, string pageAccessToken, CancellationToken ct = default);
 
+    /// <summary>Unsubscribes the page from the "leadgen" webhook field.</summary>
+    Task UnsubscribePageFromLeadgenAsync(string pageId, string pageAccessToken, CancellationToken ct = default);
+
     Task<MetaLeadDataDto> GetLeadDataAsync(string leadgenId, string pageAccessToken, CancellationToken ct = default);
     Task<IReadOnlyList<MetaFormQuestionDto>> GetLeadFormQuestionsAsync(string formId, string pageAccessToken, CancellationToken ct = default);
 }
