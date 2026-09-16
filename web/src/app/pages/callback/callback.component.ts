@@ -53,9 +53,15 @@ export class CallbackComponent implements OnInit {
     const code = queryParams['code'];
     const state = queryParams['state'];
 
-    if (!code || !state) {
+    if (!code) {
       this.status.set('error');
-      this.errorMessage.set('Missing authorization code or state token in the callback URL.');
+      this.errorMessage.set('Missing authorization code in the callback URL.');
+      return;
+    }
+
+    if (!state && !isGhl) {
+      this.status.set('error');
+      this.errorMessage.set('Missing state token in the callback URL.');
       return;
     }
 

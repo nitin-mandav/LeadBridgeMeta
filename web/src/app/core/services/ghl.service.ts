@@ -14,10 +14,12 @@ export class GhlService {
     return this.http.get<{ url: string }>(`${this.base}/connect-url`);
   }
 
-  handleCallback(code: string, state: string): Observable<{ success: boolean; locationId?: string }> {
-    return this.http.get<{ success: boolean; locationId?: string }>(`${this.base}/callback`, {
-      params: { code, state, json: 'true' },
-    });
+  handleCallback(code: string, state?: string | null): Observable<{ success: boolean; locationId?: string }> {
+    const params: Record<string, string> = { code, json: 'true' };
+    if (state) {
+      params['state'] = state;
+    }
+    return this.http.get<{ success: boolean; locationId?: string }>(`${this.base}/callback`, { params });
   }
 
   getConnections(): Observable<GhlConnection[]> {

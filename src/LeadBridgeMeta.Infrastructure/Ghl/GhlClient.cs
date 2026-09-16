@@ -17,7 +17,7 @@ public class GhlClient : IGhlClient
     {
         _http = http;
         _options = options.Value;
-        _http.BaseAddress = new Uri(_options.ApiBaseUrl);
+        _http.BaseAddress = new Uri(_options.ApiBaseUrl.TrimEnd('/') + "/");
         _http.DefaultRequestHeaders.Add("Version", _options.ApiVersion);
     }
 
@@ -30,7 +30,10 @@ public class GhlClient : IGhlClient
         qs["state"] = state;
         // Location-level scopes needed to read/write contacts for the installing sub-account.
         qs["scope"] = "contacts.readonly contacts.write locations.readonly";
-        return $"https://marketplace.gohighlevel.com/oauth/chooselocation?{qs}";
+        var baseUrl = string.IsNullOrWhiteSpace(_options.MarketplaceBaseUrl)
+            ? "https://marketplace.leadconnectorhq.com"
+            : _options.MarketplaceBaseUrl.TrimEnd('/');
+        return $"{baseUrl}/oauth/chooselocation?{qs}";
     }
 
     public async Task<GhlTokenResult> ExchangeCodeForTokenAsync(string code, string redirectUri, CancellationToken ct = default)

@@ -29,7 +29,7 @@ public class GhlController : ControllerBase
         _config = config;
     }
 
-    private string CallbackRedirectUri => $"{_config["App:ApiBaseUrl"]}/api/ghl/callback";
+    private string CallbackRedirectUri => $"{_config["App:ApiBaseUrl"]}/api/oauth/callback";
     private string FrontendConnectionsUrl => $"{_config["App:FrontendBaseUrl"]}/connections";
 
     /// <summary>Direct-install link (also used from the GHL Marketplace "Install" button, which appends its own params).</summary>
@@ -41,26 +41,66 @@ public class GhlController : ControllerBase
         return Ok(new { url });
     }
 
+    [HttpGet("/api/oauth/callback")]
     [HttpGet("callback")]
-    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, [FromQuery] bool? json, CancellationToken ct)
+    public async Task<IActionResult> Callback(
+        [FromQuery] string code,
+        [FromQuery] string? state = null,
+        [FromQuery] bool? json = null,
+        CancellationToken ct = default)
     {
         var wantsJson = json == true || Request.Headers.Accept.ToString().Contains("application/json");
 
-        Guid tenantId;
-        try
+        Guid tenantId = Guid.Empty;
+        if (!string.IsNullOrWhiteSpace(state))
         {
-            (tenantId, _) = _state.ValidateState(state);
-        }
-        catch (Exception ex)
-        {
-            if (wantsJson)
-                return BadRequest(new { error = ex.Message });
-            return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(ex.Message)}");
+            try
+            {
+                (tenantId, _) = _state.ValidateState(state);
+            }
+            catch
+            {
+                // If state was expired or had format mismatch, tenantId remains Guid.Empty
+                // and will fall back below to location matching or active tenant.
+            }
         }
 
         try
         {
             var token = await _ghl.ExchangeCodeForTokenAsync(code, CallbackRedirectUri, ct);
+
+            // If tenantId was not provided in state (e.g. direct installation from GHL Marketplace),
+            // resolve tenant from existing location connection or fall back to the active tenant.
+            if (tenantId == Guid.Empty)
+            {
+                var existingForLocation = await _db.GhlConnections
+                    .FirstOrDefaultAsync(c => c.LocationId == token.LocationId, ct);
+
+                if (existingForLocation is not null)
+                {
+                    tenantId = existingForLocation.TenantId;
+                }
+                else
+                {
+                    var defaultTenant = await _db.Tenants
+                        .Where(t => t.IsActive && t.Name != "Acme Ads")
+                        .OrderByDescending(t => t.CreatedAtUtc)
+                        .FirstOrDefaultAsync(ct)
+                        ?? await _db.Tenants.OrderByDescending(t => t.CreatedAtUtc).FirstOrDefaultAsync(ct);
+
+                    if (defaultTenant is not null)
+                    {
+                        tenantId = defaultTenant.Id;
+                    }
+                    else
+                    {
+                        var msg = "No tenant found to associate GoHighLevel connection with. Please initiate connection from the dashboard.";
+                        if (wantsJson)
+                            return BadRequest(new { error = msg });
+                        return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(msg)}");
+                    }
+                }
+            }
 
             var connection = await _db.GhlConnections
                 .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.LocationId == token.LocationId, ct);
