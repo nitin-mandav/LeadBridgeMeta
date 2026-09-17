@@ -97,7 +97,13 @@ export class MappingsComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.ghlService.getConnections().subscribe((c) => this.ghlConnections.set(c));
+    this.ghlService.getConnections().subscribe((c) => {
+      this.ghlConnections.set(c);
+      if (c.length > 0 && !this.selectedGhlConnectionId()) {
+        this.selectedGhlConnectionId.set(c[0].id);
+        this.loadGhlFields(c[0].id);
+      }
+    });
 
     this.metaService.getConnections().subscribe((connections: MetaConnection[]) => {
       const options: FormOption[] = [];
@@ -115,12 +121,17 @@ export class MappingsComponent implements OnInit {
 
   selectForm(formId: string): void {
     this.selectedFormId.set(formId);
-    const ghlId = this.selectedForm()?.ghlConnectionId ?? '';
+    let ghlId = this.selectedForm()?.ghlConnectionId ?? '';
+    if (!ghlId && this.ghlConnections().length > 0) {
+      ghlId = this.ghlConnections()[0].id;
+    }
     this.selectedGhlConnectionId.set(ghlId);
     this.mappingsService.getFieldMappings(formId).subscribe((m) => this.fieldMappings.set(m));
 
     this.loadFormFields(formId);
-    this.loadGhlFields(ghlId);
+    if (ghlId) {
+      this.loadGhlFields(ghlId);
+    }
   }
 
   onGhlConnectionChange(connId: string): void {

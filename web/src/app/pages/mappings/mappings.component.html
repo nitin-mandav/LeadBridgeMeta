@@ -25,9 +25,11 @@
     <label for="ghlSelect">Send leads to GHL location</label>
     <div class="inline">
       <select id="ghlSelect" [ngModel]="selectedGhlConnectionId()" (ngModelChange)="onGhlConnectionChange($event)">
-        <option value="" disabled>Select a location…</option>
+        @if (!selectedGhlConnectionId() || ghlConnections().length === 0) {
+          <option value="" disabled>Select a location…</option>
+        }
         @for (c of ghlConnections(); track c.id) {
-        <option [value]="c.id">{{ c.locationName }}</option>
+          <option [value]="c.id">{{ c.locationName }}</option>
         }
       </select>
       <button class="btn btn-primary" [disabled]="isSavingLocation() || !selectedGhlConnectionId()"

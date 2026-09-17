@@ -15,6 +15,10 @@ export class LeadsService {
     return this.http.get<LeadEvent[]>(`${this.base}${query}`);
   }
 
+  getLeadById(id: string): Observable<LeadEvent> {
+    return this.http.get<LeadEvent>(`${this.base}/${id}`);
+  }
+
   retry(id: string): Observable<void> {
     return this.http.post<void>(`${this.base}/${id}/retry`, {});
   }
