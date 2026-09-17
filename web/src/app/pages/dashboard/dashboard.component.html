@@ -1,41 +1,440 @@
-<h1>Leads</h1>
-<p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL.</p>
+<div class="dashboard-page">
+  <div class="page-header">
+    <div>
+      <h1>Leads</h1>
+      <p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL.</p>
+    </div>
+  </div>
 
-<div class="card">
-  @if (isLoading()) {
-    <p>Loading…</p>
-  } @else if (leads().length === 0) {
-    <p class="empty-state">No leads yet. Once a Meta form is connected and mapped, submissions will show up here.</p>
-  } @else {
-    <table>
-      <thead>
-        <tr>
-          <th>Received</th>
-          <th>Form</th>
-          <th>Status</th>
-          <th>GHL contact</th>
-          <th>Error</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (lead of leads(); track lead.id) {
-          <tr>
-            <td>{{ lead.receivedAtUtc | date: 'short' }}</td>
-            <td>{{ lead.formName }}</td>
-            <td><span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span></td>
-            <td>{{ lead.ghlContactId || '—' }}</td>
-            <td class="error-cell">{{ lead.errorMessage || '—' }}</td>
-            <td>
-              @if (lead.status === 3) {
-                <button class="btn btn-secondary" [disabled]="retryingId() === lead.id" (click)="retry(lead)">
-                  {{ retryingId() === lead.id ? 'Retrying…' : 'Retry' }}
-                </button>
-              }
-            </td>
-          </tr>
+  <!-- Summary Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card" [class.active]="statusFilter() === 'all'" (click)="setStatusFilter('all')">
+      <div class="stat-label">Total Leads</div>
+      <div class="stat-value">{{ totalCount() }}</div>
+    </div>
+    <div class="stat-card stat-sent" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">
+      <div class="stat-label">Sent to GHL</div>
+      <div class="stat-value">{{ sentCount() }}</div>
+    </div>
+    <div class="stat-card stat-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
+      <div class="stat-label">Skipped (Unmapped)</div>
+      <div class="stat-value">{{ skippedCount() }}</div>
+    </div>
+    <div class="stat-card stat-failed" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">
+      <div class="stat-label">Failed</div>
+      <div class="stat-value">{{ failedCount() }}</div>
+    </div>
+  </div>
+
+  <!-- Card with Table & Controls -->
+  <div class="card leads-card">
+    <!-- Search & Filter Controls -->
+    <div class="table-controls">
+      <div class="search-box">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text"
+               [ngModel]="searchQuery()"
+               (ngModelChange)="onSearchInput($event)"
+               placeholder="Search form, contact ID, status, or error…"
+               autocomplete="off" />
+        @if (searchQuery()) {
+          <button type="button" class="clear-btn" (click)="clearSearch()" title="Clear search">✕</button>
         }
-      </tbody>
-    </table>
+      </div>
+
+      <div class="controls-right">
+        <!-- Status Filter Pills -->
+        <div class="filter-pills">
+          <button type="button" class="pill" [class.active]="statusFilter() === 'all'" (click)="setStatusFilter('all')">
+            All ({{ totalCount() }})
+          </button>
+          <button type="button" class="pill pill-sent" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">
+            Sent ({{ sentCount() }})
+          </button>
+          <button type="button" class="pill pill-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
+            Skipped ({{ skippedCount() }})
+          </button>
+          @if (failedCount() > 0) {
+            <button type="button" class="pill pill-failed" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">
+              Failed ({{ failedCount() }})
+            </button>
+          }
+        </div>
+
+        <div class="record-count">
+          Showing <strong>{{ filteredCount() }}</strong> of <strong>{{ totalCount() }}</strong> record(s)
+        </div>
+      </div>
+    </div>
+
+    @if (isLoading()) {
+      <div class="loading-state">
+        <p>Loading leads…</p>
+      </div>
+    } @else if (leads().length === 0) {
+      <div class="empty-state">
+        <p>No leads yet. Once a Meta form is connected and mapped, submissions will show up here.</p>
+      </div>
+    } @else if (filteredAndSortedLeads().length === 0) {
+      <div class="empty-state">
+        <p>No records match your search query "<strong>{{ searchQuery() }}</strong>".</p>
+        <button class="btn btn-secondary btn-sm" style="margin-top: 0.75rem;" (click)="clearSearch(); setStatusFilter('all')">
+          Reset Filters
+        </button>
+      </div>
+    } @else {
+      <div class="table-container">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th class="sortable" (click)="toggleSort('receivedAtUtc')" title="Sort by date">
+                <span class="th-content">
+                  Received
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'receivedAtUtc'">
+                    {{ sortColumn() === 'receivedAtUtc' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  </span>
+                </span>
+              </th>
+              <th class="sortable" (click)="toggleSort('formName')" title="Sort by form">
+                <span class="th-content">
+                  Form
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'formName'">
+                    {{ sortColumn() === 'formName' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  </span>
+                </span>
+              </th>
+              <th class="sortable" (click)="toggleSort('status')" title="Sort by status">
+                <span class="th-content">
+                  Status
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'status'">
+                    {{ sortColumn() === 'status' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  </span>
+                </span>
+              </th>
+              <th class="sortable" (click)="toggleSort('ghlContactId')" title="Sort by GHL contact">
+                <span class="th-content">
+                  GHL Contact
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'ghlContactId'">
+                    {{ sortColumn() === 'ghlContactId' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  </span>
+                </span>
+              </th>
+              <th class="sortable" (click)="toggleSort('errorMessage')" title="Sort by error">
+                <span class="th-content">
+                  Error
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'errorMessage'">
+                    {{ sortColumn() === 'errorMessage' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  </span>
+                </span>
+              </th>
+              <th style="width: 110px; text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lead of paginatedLeads(); track lead.id) {
+              <tr>
+                <td class="date-cell">{{ lead.receivedAtUtc | date: 'short' }}</td>
+                <td class="form-cell">
+                  <strong>{{ lead.formName }}</strong>
+                </td>
+                <td>
+                  <span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span>
+                </td>
+                <td class="contact-cell">
+                  @if (lead.ghlContactId) {
+                    <code>{{ lead.ghlContactId }}</code>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td class="error-cell" [title]="lead.errorMessage || ''">
+                  {{ lead.errorMessage || '—' }}
+                </td>
+                <td style="text-align: right;">
+                  <div class="action-cell-content">
+                    @if (lead.status === 3 || lead.status === 4) {
+                      <button class="btn btn-secondary btn-sm" [disabled]="retryingId() === lead.id" (click)="retry(lead)" title="Retry sending this lead to GHL">
+                        {{ retryingId() === lead.id ? 'Retrying…' : 'Retry' }}
+                      </button>
+                    }
+                    <button type="button"
+                            class="action-icon-btn"
+                            (click)="openContactDetails(lead)"
+                            title="View contact details"
+                            aria-label="View contact details">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 4 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Controls Bar -->
+      <div class="pagination-bar">
+        <div class="pagination-info">
+          Showing <strong>{{ pageStartRecord() }}</strong>–<strong>{{ pageEndRecord() }}</strong> of <strong>{{ filteredCount() }}</strong> leads
+        </div>
+
+        <div class="pagination-controls">
+          <!-- Page Size Selector -->
+          <div class="page-size-selector">
+            <label for="pageSizeSelect">Rows per page:</label>
+            <select id="pageSizeSelect" [value]="pageSize()" (change)="onPageSizeChange($event)">
+              @for (size of pageSizeOptions; track size) {
+                <option [value]="size">{{ size }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Page Navigation Buttons -->
+          <div class="page-nav">
+            <button type="button"
+                    class="nav-btn"
+                    [disabled]="currentPage() <= 1"
+                    (click)="goToPage(1)"
+                    title="First page">
+              «
+            </button>
+            <button type="button"
+                    class="nav-btn"
+                    [disabled]="currentPage() <= 1"
+                    (click)="prevPage()"
+                    title="Previous page">
+              ‹
+            </button>
+
+            @for (p of visiblePages(); track p) {
+              <button type="button"
+                      class="page-number-btn"
+                      [class.active]="p === currentPage()"
+                      (click)="goToPage(p)">
+                {{ p }}
+              </button>
+            }
+
+            <button type="button"
+                    class="nav-btn"
+                    [disabled]="currentPage() >= totalPages()"
+                    (click)="nextPage()"
+                    title="Next page">
+              ›
+            </button>
+            <button type="button"
+                    class="nav-btn"
+                    [disabled]="currentPage() >= totalPages()"
+                    (click)="goToPage(totalPages())"
+                    title="Last page">
+              »
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Contact Details Modal -->
+  @if (isModalOpen() && selectedLead(); as lead) {
+    <div class="modal-backdrop" (click)="closeContactDetails()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <!-- Header -->
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3>Contact Details</h3>
+            <span class="modal-subtitle">Submitted via <strong>{{ lead.formName }}</strong></span>
+          </div>
+          <button type="button" class="modal-close-btn" (click)="closeContactDetails()" title="Close dialog">✕</button>
+        </div>
+
+        <!-- Body -->
+        <div class="modal-body">
+          <!-- Primary Contact Profile Card -->
+          <div class="contact-profile-card">
+            <div class="contact-avatar">{{ selectedContact().initials }}</div>
+            <div class="contact-main-info">
+              <div class="contact-name-row">
+                <h4>{{ selectedContact().name }}</h4>
+                <span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span>
+              </div>
+              <div class="contact-quick-links">
+                @if (selectedContact().email) {
+                  <a [href]="'mailto:' + selectedContact().email" class="quick-link" title="Send email">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                    </svg>
+                    {{ selectedContact().email }}
+                  </a>
+                }
+                @if (selectedContact().phone) {
+                  <a [href]="'tel:' + selectedContact().phone" class="quick-link" title="Call phone">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                    </svg>
+                    {{ selectedContact().phone }}
+                  </a>
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Identifiers & Metadata Grid -->
+          <div class="details-section">
+            <h5 class="section-heading">Lead Information & Identifiers</h5>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">GHL Contact ID</span>
+                <div class="meta-value-copy">
+                  @if (lead.ghlContactId) {
+                    <code>{{ lead.ghlContactId }}</code>
+                    <button type="button" class="btn-copy" (click)="copyText(lead.ghlContactId, 'ghl')" title="Copy GHL ID">
+                      {{ copiedKey() === 'ghl' ? '✓ Copied' : 'Copy' }}
+                    </button>
+                  } @else {
+                    <span class="muted">Not created in GHL</span>
+                  }
+                </div>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-label">Meta Leadgen ID</span>
+                <div class="meta-value-copy">
+                  <code>{{ lead.leadgenId }}</code>
+                  <button type="button" class="btn-copy" (click)="copyText(lead.leadgenId, 'leadgen')" title="Copy Leadgen ID">
+                    {{ copiedKey() === 'leadgen' ? '✓ Copied' : 'Copy' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-label">Received At</span>
+                <span class="meta-value">{{ lead.receivedAtUtc | date: 'medium' }}</span>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-label">Processed At</span>
+                <span class="meta-value">{{ lead.processedAtUtc ? (lead.processedAtUtc | date: 'medium') : '—' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error Alert if present -->
+          @if (lead.errorMessage) {
+            <div class="details-error-box">
+              <div class="error-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                Processing Error
+              </div>
+              <div class="error-message">{{ lead.errorMessage }}</div>
+            </div>
+          }
+
+          <!-- Form Answers Section -->
+          <div class="details-section">
+            <div class="section-heading-row">
+              <h5 class="section-heading">Submitted Form Answers</h5>
+              @if (isFetchingDetails()) {
+                <span class="fetching-pill">
+                  <span class="spinner-sm"></span> Fetching from Meta…
+                </span>
+              }
+            </div>
+
+            @if (isFetchingDetails()) {
+              <div class="fields-loading-state">
+                <span class="spinner"></span>
+                <p>Connecting to Meta Graph API to retrieve submitted form responses…</p>
+              </div>
+            } @else if (selectedFields().length > 0) {
+              <div class="fields-table-wrapper">
+                <table class="fields-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 38%;">Field / Question</th>
+                      <th style="width: 62%;">Submitted Response</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (field of selectedFields(); track field.rawKey) {
+                      <tr>
+                        <td class="field-key-cell">
+                          <span class="field-title">{{ field.label }}</span>
+                          <span class="field-raw-key">{{ field.rawKey }}</span>
+                        </td>
+                        <td class="field-value-cell">
+                          <span class="field-value-text">{{ field.value }}</span>
+                          <button type="button" class="btn-copy-sm" (click)="copyText(field.value, field.rawKey)" title="Copy answer">
+                            {{ copiedKey() === field.rawKey ? '✓' : 'Copy' }}
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="fields-empty-note">
+                <p>No submitted field data cached in raw payload for this record.</p>
+                <small class="muted">
+                  Note: Past leads processed prior to payload caching or with missing records can be fetched on-demand.
+                </small>
+                <div style="margin-top: 0.75rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="fetchLeadDetails(lead.id)" [disabled]="isFetchingDetails()">
+                    🔄 Fetch Answers from Meta
+                  </button>
+                </div>
+                @if (fetchError()) {
+                  <div class="error-text" style="margin-top: 0.5rem; font-size: 0.8rem;">
+                    {{ fetchError() }}
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Technical Raw JSON -->
+          @if (getRawLeadData(lead)) {
+            <div class="details-section raw-json-section">
+              <button type="button" class="raw-toggle-btn" (click)="toggleRawJson()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline [attr.points]="showRawJson() ? '6 15 12 9 18 15' : '6 9 12 15 18 9'"></polyline>
+                </svg>
+                {{ showRawJson() ? 'Hide Raw Meta Payload' : 'View Raw Meta Payload (JSON)' }}
+              </button>
+              @if (showRawJson()) {
+                <div class="raw-json-container">
+                  <button type="button" class="btn-copy btn-copy-json" (click)="copyText(selectedFormattedJson(), 'json')">
+                    {{ copiedKey() === 'json' ? '✓ Copied' : 'Copy JSON' }}
+                  </button>
+                  <pre><code>{{ selectedFormattedJson() }}</code></pre>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+          @if (lead.status === 3 || lead.status === 4) {
+            <button class="btn btn-primary" [disabled]="retryingId() === lead.id" (click)="retry(lead)">
+              {{ retryingId() === lead.id ? 'Retrying…' : 'Retry Sending to GHL' }}
+            </button>
+          }
+          <button class="btn btn-secondary" (click)="closeContactDetails()">Close</button>
+        </div>
+      </div>
+    </div>
   }
 </div>

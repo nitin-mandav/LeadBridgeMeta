@@ -18,4 +18,5 @@ export interface LeadEvent {
   retryCount: number;
   receivedAtUtc: string;
   processedAtUtc: string | null;
+  rawLeadDataJson?: string | null;
 }

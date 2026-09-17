@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<ILeadProcessingService, LeadProcessingService>();
         services.AddScoped<IGhlConnectionService, GhlConnectionService>();
         services.AddScoped<IMappingService, MappingService>();
+        services.AddScoped<IMetaWebhookService, MetaWebhookService>();
 
         services.AddSingleton<IMetaWebhookQueue, MetaWebhookQueue>();
         services.AddHostedService<MetaWebhookProcessingWorker>();

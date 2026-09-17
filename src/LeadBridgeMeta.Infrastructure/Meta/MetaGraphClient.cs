@@ -113,12 +113,39 @@ public class MetaGraphClient : IMetaGraphClient
         var url = $"{leadgenId}?fields=id,form_id,created_time,field_data,ad_id&access_token={Uri.EscapeDataString(pageAccessToken)}";
         var lead = await GetAsync<LeadResponse>(url, ct);
 
+        var createdUtc = ParseMetaDateTime(lead.CreatedTime);
+        var fieldData = (lead.FieldData ?? [])
+            .Select(f => new MetaLeadFieldData(f.Name, f.Values ?? []))
+            .ToList();
+
         return new MetaLeadDataDto(
-            lead.Id,
-            lead.FormId,
+            lead.Id ?? leadgenId,
+            lead.FormId ?? string.Empty,
             PageId: string.Empty,
-            lead.CreatedTime,
-            lead.FieldData.Select(f => new MetaLeadFieldData(f.Name, f.Values)).ToList());
+            createdUtc,
+            fieldData);
+    }
+
+    private static DateTime ParseMetaDateTime(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var str = element.GetString();
+            if (!string.IsNullOrWhiteSpace(str))
+            {
+                if (DateTimeOffset.TryParse(str, out var dto))
+                    return dto.UtcDateTime;
+                if (DateTime.TryParse(str, out var dt))
+                    return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Number)
+        {
+            if (element.TryGetInt64(out var seconds))
+                return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        }
+
+        return DateTime.UtcNow;
     }
 
     private async Task<T> GetAsync<T>(string urlOrPath, CancellationToken ct, bool absoluteUrl = false)
@@ -176,13 +203,15 @@ public class MetaGraphClient : IMetaGraphClient
         [property: JsonPropertyName("name")] string? Name,
         [property: JsonPropertyName("questions")] List<FormQuestionResponse>? Questions);
 
-    private record LeadFieldDataResponse(string Name, List<string> Values);
+    private record LeadFieldDataResponse(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("values")] List<string>? Values);
 
     private record LeadResponse(
-        string Id,
-        [property: JsonPropertyName("form_id")] string FormId,
-        [property: JsonPropertyName("created_time")] DateTime CreatedTime,
-        [property: JsonPropertyName("field_data")] List<LeadFieldDataResponse> FieldData);
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("form_id")] string? FormId,
+        [property: JsonPropertyName("created_time")] JsonElement CreatedTime,
+        [property: JsonPropertyName("field_data")] List<LeadFieldDataResponse>? FieldData);
 
     private record PagingResponse([property: JsonPropertyName("next")] string? Next);
 
