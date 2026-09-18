@@ -29,16 +29,31 @@ public class OAuthStateService : IOAuthStateService
 
     public (Guid TenantId, string Purpose) ValidateState(string state)
     {
-        StatePayload payload;
+        StatePayload? payload = null;
         try
         {
-            payload = JsonSerializer.Deserialize<StatePayload>(_protector.Unprotect(state))
-                      ?? throw new InvalidOperationException("Empty OAuth state payload.");
+            var raw = _protector.Unprotect(state);
+            payload = JsonSerializer.Deserialize<StatePayload>(raw);
         }
-        catch (Exception ex)
+        catch
         {
-            throw new InvalidOperationException("Invalid or tampered OAuth state.", ex);
+            // If query string decoding replaced '+' with ' ', retry after restoring '+'
+            if (state.Contains(' '))
+            {
+                try
+                {
+                    var raw = _protector.Unprotect(state.Replace(' ', '+'));
+                    payload = JsonSerializer.Deserialize<StatePayload>(raw);
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
         }
+
+        if (payload is null)
+            throw new InvalidOperationException("Invalid or tampered OAuth state.");
 
         if (payload.ExpiresAtUtc < DateTime.UtcNow)
             throw new InvalidOperationException("OAuth state has expired; please restart the connection.");

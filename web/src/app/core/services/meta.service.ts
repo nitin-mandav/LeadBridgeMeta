@@ -27,4 +27,16 @@ export class MetaService {
   subscribePage(pageId: string): Observable<void> {
     return this.http.post<void>(`${this.base}/pages/${pageId}/subscribe`, {});
   }
+
+  unsubscribePage(pageId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/pages/${pageId}/unsubscribe`, {});
+  }
+
+  syncPage(pageId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/pages/${pageId}/sync`, {});
+  }
+
+  disconnect(connectionId: string): Observable<{ success: boolean; message?: string }> {
+    return this.http.delete<{ success: boolean; message?: string }>(`${this.base}/connections/${connectionId}`);
+  }
 }

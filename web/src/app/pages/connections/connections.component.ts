@@ -18,14 +18,21 @@ export class ConnectionsComponent implements OnInit {
   readonly ghlConnections = signal<GhlConnection[]>([]);
   readonly isLoading = signal(true);
   readonly subscribingPageId = signal<string | null>(null);
+  readonly unsubscribingPageId = signal<string | null>(null);
+  readonly syncingPageId = signal<string | null>(null);
   readonly notice = signal<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  readonly isConnectingGhl = signal(false);
+  readonly isConnectingMeta = signal(false);
+  readonly disconnectingGhlId = signal<string | null>(null);
+  readonly disconnectingMetaId = signal<string | null>(null);
 
   constructor(private metaService: MetaService, private ghlService: GhlService, private route: ActivatedRoute) {}
 
   ngOnInit(): void {
     const params = this.route.snapshot.queryParamMap;
-    if (params.get('meta_connected')) this.notice.set({ kind: 'success', text: 'Meta account connected.' });
-    if (params.get('ghl_connected')) this.notice.set({ kind: 'success', text: 'GoHighLevel location connected.' });
+    if (params.get('meta_connected')) this.notice.set({ kind: 'success', text: 'Meta account connected successfully.' });
+    if (params.get('ghl_connected')) this.notice.set({ kind: 'success', text: 'GoHighLevel location connected successfully.' });
     if (params.get('meta_error')) this.notice.set({ kind: 'error', text: params.get('meta_error')! });
     if (params.get('ghl_error')) this.notice.set({ kind: 'error', text: params.get('ghl_error')! });
 
@@ -45,11 +52,61 @@ export class ConnectionsComponent implements OnInit {
   }
 
   connectMeta(): void {
-    this.metaService.getConnectUrl().subscribe((res) => (window.location.href = res.url));
+    this.isConnectingMeta.set(true);
+    this.metaService.getConnectUrl().subscribe({
+      next: (res) => (window.location.href = res.url),
+      error: (err) => {
+        this.isConnectingMeta.set(false);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to initiate Meta connection.' });
+      }
+    });
+  }
+
+  disconnectMeta(connectionId: string): void {
+    if (!confirm('Are you sure you want to disconnect this Meta account? Subscribed pages and forms will be disconnected.')) {
+      return;
+    }
+    this.disconnectingMetaId.set(connectionId);
+    this.metaService.disconnect(connectionId).subscribe({
+      next: () => {
+        this.disconnectingMetaId.set(null);
+        this.notice.set({ kind: 'success', text: 'Meta account disconnected successfully.' });
+        this.load();
+      },
+      error: (err) => {
+        this.disconnectingMetaId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to disconnect Meta account.' });
+      }
+    });
   }
 
   connectGhl(): void {
-    this.ghlService.getConnectUrl().subscribe((res) => (window.location.href = res.url));
+    this.isConnectingGhl.set(true);
+    this.ghlService.getConnectUrl().subscribe({
+      next: (res) => (window.location.href = res.url),
+      error: (err) => {
+        this.isConnectingGhl.set(false);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to initiate GoHighLevel connection.' });
+      }
+    });
+  }
+
+  disconnectGhl(connectionId: string): void {
+    if (!confirm('Are you sure you want to disconnect and logout from this GoHighLevel location?')) {
+      return;
+    }
+    this.disconnectingGhlId.set(connectionId);
+    this.ghlService.disconnect(connectionId).subscribe({
+      next: () => {
+        this.disconnectingGhlId.set(null);
+        this.notice.set({ kind: 'success', text: 'GoHighLevel location disconnected successfully.' });
+        this.load();
+      },
+      error: (err) => {
+        this.disconnectingGhlId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to disconnect GoHighLevel location.' });
+      }
+    });
   }
 
   subscribePage(pageId: string): void {
@@ -57,9 +114,48 @@ export class ConnectionsComponent implements OnInit {
     this.metaService.subscribePage(pageId).subscribe({
       next: () => {
         this.subscribingPageId.set(null);
+        this.notice.set({ kind: 'success', text: 'Subscribed to lead webhooks successfully.' });
         this.load();
       },
-      error: () => this.subscribingPageId.set(null),
+      error: (err) => {
+        this.subscribingPageId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to subscribe page to leads.' });
+      },
+    });
+  }
+
+  unsubscribePage(pageId: string, pageName: string): void {
+    if (!confirm(`Are you sure you want to unsubscribe "${pageName}" from lead webhooks?`)) {
+      return;
+    }
+    this.unsubscribingPageId.set(pageId);
+    this.metaService.unsubscribePage(pageId).subscribe({
+      next: () => {
+        this.unsubscribingPageId.set(null);
+        this.notice.set({ kind: 'success', text: `Unsubscribed "${pageName}" from lead webhooks.` });
+        this.load();
+      },
+      error: (err) => {
+        this.unsubscribingPageId.set(null);
+        const errMsg = err?.error?.error || err?.error?.message || (err?.status ? `Server returned HTTP ${err.status} (${err.statusText || 'Not Found - please restart .NET API'})` : `Failed to unsubscribe "${pageName}".`);
+        this.notice.set({ kind: 'error', text: errMsg });
+      },
+    });
+  }
+
+  syncPage(pageId: string, pageName: string): void {
+    this.syncingPageId.set(pageId);
+    this.metaService.syncPage(pageId).subscribe({
+      next: () => {
+        this.syncingPageId.set(null);
+        this.notice.set({ kind: 'success', text: `Successfully synced lead forms for "${pageName}".` });
+        this.load();
+      },
+      error: (err) => {
+        this.syncingPageId.set(null);
+        const errMsg = err?.error?.error || err?.error?.message || (err?.status ? `Server returned HTTP ${err.status} (${err.statusText || 'Not Found - please restart .NET API'})` : `Failed to sync forms for "${pageName}".`);
+        this.notice.set({ kind: 'error', text: errMsg });
+      },
     });
   }
 }

@@ -2,11 +2,13 @@ using LeadBridgeMeta.Application.Auth;
 using LeadBridgeMeta.Application.Common;
 using LeadBridgeMeta.Application.Ghl;
 using LeadBridgeMeta.Application.Leads;
+using LeadBridgeMeta.Application.Mappings;
 using LeadBridgeMeta.Application.Meta;
 using LeadBridgeMeta.Infrastructure.Auth;
 using LeadBridgeMeta.Infrastructure.Ghl;
 using LeadBridgeMeta.Infrastructure.Identity;
 using LeadBridgeMeta.Infrastructure.Leads;
+using LeadBridgeMeta.Infrastructure.Mappings;
 using LeadBridgeMeta.Infrastructure.Meta;
 using LeadBridgeMeta.Infrastructure.Persistence;
 using LeadBridgeMeta.Infrastructure.Security;
@@ -49,6 +51,9 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserContext, HttpCurrentUserContext>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<ILeadProcessingService, LeadProcessingService>();
+        services.AddScoped<IGhlConnectionService, GhlConnectionService>();
+        services.AddScoped<IMappingService, MappingService>();
+        services.AddScoped<IMetaWebhookService, MetaWebhookService>();
 
         services.AddSingleton<IMetaWebhookQueue, MetaWebhookQueue>();
         services.AddHostedService<MetaWebhookProcessingWorker>();

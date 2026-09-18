@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { GhlConnection } from '../models/ghl.models';
+import { GhlConnection, GhlFieldOption } from '../models/ghl.models';
 
 @Injectable({ providedIn: 'root' })
 export class GhlService {
@@ -14,13 +14,23 @@ export class GhlService {
     return this.http.get<{ url: string }>(`${this.base}/connect-url`);
   }
 
-  handleCallback(code: string, state: string): Observable<{ success: boolean; locationId?: string }> {
-    return this.http.get<{ success: boolean; locationId?: string }>(`${this.base}/callback`, {
-      params: { code, state, json: 'true' },
-    });
+  handleCallback(code: string, state?: string | null): Observable<{ success: boolean; locationId?: string }> {
+    const params: Record<string, string> = { code, json: 'true' };
+    if (state) {
+      params['state'] = state;
+    }
+    return this.http.get<{ success: boolean; locationId?: string }>(`${this.base}/callback`, { params });
   }
 
   getConnections(): Observable<GhlConnection[]> {
     return this.http.get<GhlConnection[]>(`${this.base}/connections`);
+  }
+
+  getLocationFields(connectionId: string): Observable<GhlFieldOption[]> {
+    return this.http.get<GhlFieldOption[]>(`${this.base}/connections/${connectionId}/fields`);
+  }
+
+  disconnect(connectionId: string): Observable<{ success: boolean; message?: string }> {
+    return this.http.delete<{ success: boolean; message?: string }>(`${this.base}/connections/${connectionId}`);
   }
 }

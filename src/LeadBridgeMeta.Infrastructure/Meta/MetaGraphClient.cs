@@ -101,17 +101,51 @@ public class MetaGraphClient : IMetaGraphClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task UnsubscribePageFromLeadgenAsync(string pageId, string pageAccessToken, CancellationToken ct = default)
+    {
+        var url = $"{pageId}/subscribed_apps?access_token={Uri.EscapeDataString(pageAccessToken)}";
+        using var response = await _http.DeleteAsync(url, ct);
+        // We do not throw if already unsubscribed or not found
+    }
+
     public async Task<MetaLeadDataDto> GetLeadDataAsync(string leadgenId, string pageAccessToken, CancellationToken ct = default)
     {
         var url = $"{leadgenId}?fields=id,form_id,created_time,field_data,ad_id&access_token={Uri.EscapeDataString(pageAccessToken)}";
         var lead = await GetAsync<LeadResponse>(url, ct);
 
+        var createdUtc = ParseMetaDateTime(lead.CreatedTime);
+        var fieldData = (lead.FieldData ?? [])
+            .Select(f => new MetaLeadFieldData(f.Name, f.Values ?? []))
+            .ToList();
+
         return new MetaLeadDataDto(
-            lead.Id,
-            lead.FormId,
+            lead.Id ?? leadgenId,
+            lead.FormId ?? string.Empty,
             PageId: string.Empty,
-            lead.CreatedTime,
-            lead.FieldData.Select(f => new MetaLeadFieldData(f.Name, f.Values)).ToList());
+            createdUtc,
+            fieldData);
+    }
+
+    private static DateTime ParseMetaDateTime(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var str = element.GetString();
+            if (!string.IsNullOrWhiteSpace(str))
+            {
+                if (DateTimeOffset.TryParse(str, out var dto))
+                    return dto.UtcDateTime;
+                if (DateTime.TryParse(str, out var dt))
+                    return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Number)
+        {
+            if (element.TryGetInt64(out var seconds))
+                return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        }
+
+        return DateTime.UtcNow;
     }
 
     private async Task<T> GetAsync<T>(string urlOrPath, CancellationToken ct, bool absoluteUrl = false)
@@ -128,6 +162,24 @@ public class MetaGraphClient : IMetaGraphClient
                ?? throw new MetaGraphApiException("Meta Graph API returned an empty/invalid response.");
     }
 
+    public async Task<IReadOnlyList<MetaFormQuestionDto>> GetLeadFormQuestionsAsync(string formId, string pageAccessToken, CancellationToken ct = default)
+    {
+        var url = $"{formId}?fields=id,name,questions&access_token={Uri.EscapeDataString(pageAccessToken)}";
+        var form = await GetAsync<LeadFormDetailResponse>(url, ct);
+        if (form.Questions is null || form.Questions.Count == 0)
+            return [];
+
+        return form.Questions.Select(q =>
+        {
+            var effectiveKey = !string.IsNullOrWhiteSpace(q.Key) ? q.Key : (!string.IsNullOrWhiteSpace(q.FieldKey) ? q.FieldKey : (q.Type?.ToLowerInvariant() ?? q.Label ?? "unknown"));
+            return new MetaFormQuestionDto(
+                Key: effectiveKey,
+                Label: string.IsNullOrWhiteSpace(q.Label) ? effectiveKey : q.Label,
+                Type: q.Type
+            );
+        }).ToList();
+    }
+
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     private record TokenResponse(
@@ -140,13 +192,26 @@ public class MetaGraphClient : IMetaGraphClient
 
     private record LeadFormResponse(string Id, string Name, string? Status);
 
-    private record LeadFieldDataResponse(string Name, List<string> Values);
+    private record FormQuestionResponse(
+        [property: JsonPropertyName("key")] string? Key,
+        [property: JsonPropertyName("field_key")] string? FieldKey,
+        [property: JsonPropertyName("label")] string? Label,
+        [property: JsonPropertyName("type")] string? Type);
+
+    private record LeadFormDetailResponse(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("questions")] List<FormQuestionResponse>? Questions);
+
+    private record LeadFieldDataResponse(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("values")] List<string>? Values);
 
     private record LeadResponse(
-        string Id,
-        [property: JsonPropertyName("form_id")] string FormId,
-        [property: JsonPropertyName("created_time")] DateTime CreatedTime,
-        [property: JsonPropertyName("field_data")] List<LeadFieldDataResponse> FieldData);
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("form_id")] string? FormId,
+        [property: JsonPropertyName("created_time")] JsonElement CreatedTime,
+        [property: JsonPropertyName("field_data")] List<LeadFieldDataResponse>? FieldData);
 
     private record PagingResponse([property: JsonPropertyName("next")] string? Next);
 

@@ -58,7 +58,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.All
+});
+
+// app.UseHttpsRedirection(); // Disabled: prevents redirection to localhost:7224 when accessed via ngrok / reverse proxy
 app.UseCors("AppCors");
 app.UseAuthentication();
 app.UseAuthorization();

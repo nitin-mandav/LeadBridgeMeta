@@ -78,6 +78,30 @@ a {
   background: var(--color-bg);
 }
 
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.btn-outline-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border-color: #fca5a5;
+}
+.btn-outline-danger:hover {
+  background: #fee2e2;
+  border-color: var(--color-danger);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
 .field {
   display: flex;
   flex-direction: column;

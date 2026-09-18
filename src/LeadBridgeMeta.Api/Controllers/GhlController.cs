@@ -1,9 +1,7 @@
 using LeadBridgeMeta.Application.Common;
 using LeadBridgeMeta.Application.Ghl;
-using LeadBridgeMeta.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace LeadBridgeMeta.Api.Controllers;
@@ -14,18 +12,12 @@ public record GhlConnectionResponse(Guid Id, string LocationId, string LocationN
 [Route("api/ghl")]
 public class GhlController : ControllerBase
 {
-    private readonly IAppDbContext _db;
-    private readonly IGhlClient _ghl;
-    private readonly ITokenProtector _protector;
-    private readonly IOAuthStateService _state;
+    private readonly IGhlConnectionService _ghlService;
     private readonly IConfiguration _config;
 
-    public GhlController(IAppDbContext db, IGhlClient ghl, ITokenProtector protector, IOAuthStateService state, IConfiguration config)
+    public GhlController(IGhlConnectionService ghlService, IConfiguration config)
     {
-        _db = db;
-        _ghl = ghl;
-        _protector = protector;
-        _state = state;
+        _ghlService = ghlService;
         _config = config;
     }
 
@@ -36,71 +28,71 @@ public class GhlController : ControllerBase
     [HttpGet("connect-url"), Authorize]
     public ActionResult<object> GetConnectUrl([FromServices] ICurrentUserContext currentUser)
     {
-        var state = _state.CreateState(currentUser.TenantId, "ghl-connect");
-        var url = _ghl.BuildAuthorizeUrl(state, CallbackRedirectUri);
+        var url = _ghlService.GetConnectUrl(currentUser.TenantId, CallbackRedirectUri);
         return Ok(new { url });
     }
 
     [HttpGet("callback")]
-    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string state, [FromQuery] bool? json, CancellationToken ct)
+    [HttpGet("/api/oauth/callback")]
+    public async Task<IActionResult> Callback([FromQuery] string code, [FromQuery] string? state, [FromQuery] bool? json, CancellationToken ct)
     {
         var wantsJson = json == true || Request.Headers.Accept.ToString().Contains("application/json");
 
-        Guid tenantId;
-        try
-        {
-            (tenantId, _) = _state.ValidateState(state);
-        }
-        catch (Exception ex)
-        {
-            if (wantsJson)
-                return BadRequest(new { error = ex.Message });
-            return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(ex.Message)}");
-        }
+        // Dynamically resolve redirect URI from the incoming request path so token exchange matches whichever endpoint was called
+        var effectiveRedirectUri = $"{Request.Scheme}://{Request.Host}{Request.Path}";
+        var result = await _ghlService.ProcessOAuthCallbackAsync(code, state, effectiveRedirectUri, ct);
 
-        try
+        if (!result.Success)
         {
-            var token = await _ghl.ExchangeCodeForTokenAsync(code, CallbackRedirectUri, ct);
-
-            var connection = await _db.GhlConnections
-                .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.LocationId == token.LocationId, ct);
-
-            if (connection is null)
+            // Fallback retry with configured CallbackRedirectUri if there was a URI mismatch
+            if (effectiveRedirectUri != CallbackRedirectUri)
             {
-                connection = new GhlConnection { TenantId = tenantId, LocationId = token.LocationId };
-                _db.GhlConnections.Add(connection);
+                result = await _ghlService.ProcessOAuthCallbackAsync(code, state, CallbackRedirectUri, ct);
             }
-
-            connection.CompanyId = token.CompanyId;
-            connection.LocationName = token.LocationId; // Refined later via a GET /locations/{id} call if a friendly name is needed.
-            connection.EncryptedAccessToken = _protector.Protect(token.AccessToken);
-            connection.EncryptedRefreshToken = _protector.Protect(token.RefreshToken);
-            connection.AccessTokenExpiresAtUtc = token.ExpiresAtUtc;
-
-            await _db.SaveChangesAsync(ct);
-
-            if (wantsJson)
-                return Ok(new { success = true, locationId = token.LocationId });
-
-            return Redirect($"{FrontendConnectionsUrl}?ghl_connected=1");
         }
-        catch (Exception ex)
+
+        if (!result.Success)
         {
             if (wantsJson)
-                return StatusCode(500, new { error = ex.Message });
+                return BadRequest(new { error = result.ErrorMessage });
 
-            return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(ex.Message)}");
+            return Redirect($"{FrontendConnectionsUrl}?ghl_error={Uri.EscapeDataString(result.ErrorMessage ?? "OAuth callback failed")}");
         }
+
+        if (wantsJson)
+            return Ok(new { success = true, locationId = result.LocationId });
+
+        return Redirect($"{FrontendConnectionsUrl}?ghl_connected=1");
     }
 
     [HttpGet("connections"), Authorize]
     public async Task<ActionResult<List<GhlConnectionResponse>>> GetConnections([FromServices] ICurrentUserContext currentUser, CancellationToken ct)
     {
-        var connections = await _db.GhlConnections
-            .Where(c => c.TenantId == currentUser.TenantId)
-            .Select(c => new GhlConnectionResponse(c.Id, c.LocationId, c.LocationName, c.AccessTokenExpiresAtUtc))
-            .ToListAsync(ct);
+        var connections = await _ghlService.GetConnectionsAsync(currentUser.TenantId, ct);
+        var response = connections.Select(c => new GhlConnectionResponse(c.Id, c.LocationId, c.LocationName, c.AccessTokenExpiresAtUtc)).ToList();
+        return Ok(response);
+    }
 
-        return Ok(connections);
+    [HttpGet("connections/{connectionId:guid}/fields"), Authorize]
+    public async Task<ActionResult<List<GhlFieldOptionDto>>> GetLocationFields(
+        Guid connectionId,
+        [FromServices] ICurrentUserContext currentUser,
+        CancellationToken ct)
+    {
+        var fields = await _ghlService.GetLocationFieldsAsync(connectionId, currentUser.TenantId, ct);
+        return Ok(fields);
+    }
+
+    [HttpDelete("connections/{connectionId:guid}"), Authorize]
+    public async Task<IActionResult> Disconnect(
+        Guid connectionId,
+        [FromServices] ICurrentUserContext currentUser,
+        CancellationToken ct)
+    {
+        var success = await _ghlService.DisconnectAsync(connectionId, currentUser.TenantId, ct);
+        if (!success)
+            return NotFound(new { error = "Connection not found or already removed." });
+
+        return Ok(new { success = true, message = "GoHighLevel connection disconnected successfully." });
     }
 }

@@ -1,5 +1,5 @@
 <h1>Connections</h1>
-<p class="page-subtitle">Connect a Meta ad account and a GoHighLevel location, then map forms to it under Field Mapping.</p>
+<p class="page-subtitle">Connect your Meta ad account and GoHighLevel location to enable automated lead synchronization.</p>
 
 @if (notice(); as n) {
   <div class="notice" [class.notice-error]="n.kind === 'error'">{{ n.text }}</div>
@@ -7,29 +7,57 @@
 
 <div class="card section">
   <div class="section-header">
-    <h2>Meta (Facebook Lead Ads)</h2>
-    <button class="btn btn-primary" (click)="connectMeta()">Connect Meta account</button>
+    <div class="header-title-group">
+      <h2>Meta (Facebook Lead Ads)</h2>
+      @if (metaConnections().length > 0) {
+        <span class="badge badge-sent">Connected</span>
+      }
+    </div>
+    <div class="header-actions">
+      @if (metaConnections().length === 0) {
+        <button class="btn btn-primary" [disabled]="isConnectingMeta()" (click)="connectMeta()">
+          {{ isConnectingMeta() ? 'Redirecting to Meta…' : 'Connect Meta account' }}
+        </button>
+      } @else {
+        <button class="btn btn-outline-danger" [disabled]="disconnectingMetaId() !== null" (click)="disconnectMeta(metaConnections()[0].id)">
+          {{ disconnectingMetaId() === metaConnections()[0].id ? 'Disconnecting…' : 'Logout / Disconnect Meta' }}
+        </button>
+      }
+    </div>
   </div>
 
   @if (metaConnections().length === 0) {
-    <p class="empty-state">No Meta account connected yet.</p>
+    <p class="empty-state">No Meta account connected yet. Click the button above to authorize Facebook Lead Ads.</p>
   } @else {
     @for (conn of metaConnections(); track conn.id) {
       <div class="connection-block">
-        <div class="connection-title">{{ conn.facebookUserName }}</div>
+        <div class="connection-title">
+          <span>Connected as: <strong>{{ conn.facebookUserName }}</strong></span>
+          <span class="muted" style="margin-left: 0.75rem;">(Token valid until {{ conn.tokenExpiresAtUtc | date: 'shortDate' }})</span>
+        </div>
         @for (page of conn.pages; track page.id) {
           <div class="page-row">
-            <div>
+            <div class="page-info">
               <strong>{{ page.pageName }}</strong>
+              @if (page.isLeadgenWebhookSubscribed) {
+                <span class="badge badge-sent">Subscribed</span>
+              }
               <span class="muted"> · {{ page.forms.length }} form(s)</span>
             </div>
-            @if (page.isLeadgenWebhookSubscribed) {
-              <span class="badge badge-sent">Subscribed</span>
-            } @else {
-              <button class="btn btn-secondary" [disabled]="subscribingPageId() === page.pageId" (click)="subscribePage(page.id)">
-                {{ subscribingPageId() === page.id ? 'Subscribing…' : 'Subscribe to leads' }}
-              </button>
-            }
+            <div class="page-actions">
+              @if (page.isLeadgenWebhookSubscribed) {
+                <button class="btn btn-secondary btn-sm" [disabled]="syncingPageId() === page.id" (click)="syncPage(page.id, page.pageName)" title="Sync latest forms from Meta">
+                  {{ syncingPageId() === page.id ? 'Syncing…' : 'Sync' }}
+                </button>
+                <button class="btn btn-outline-danger btn-sm" [disabled]="unsubscribingPageId() === page.id" (click)="unsubscribePage(page.id, page.pageName)" title="Unsubscribe from lead webhooks">
+                  {{ unsubscribingPageId() === page.id ? 'Unsubscribing…' : 'Unsubscribe' }}
+                </button>
+              } @else {
+                <button class="btn btn-primary btn-sm" [disabled]="subscribingPageId() === page.id" (click)="subscribePage(page.id)" title="Subscribe to lead webhooks">
+                  {{ subscribingPageId() === page.id ? 'Subscribing…' : 'Subscribe' }}
+                </button>
+              }
+            </div>
           </div>
         }
       </div>
@@ -39,27 +67,53 @@
 
 <div class="card section">
   <div class="section-header">
-    <h2>GoHighLevel</h2>
-    <button class="btn btn-primary" (click)="connectGhl()">Connect GHL location</button>
+    <div class="header-title-group">
+      <h2>GoHighLevel</h2>
+      @if (ghlConnections().length > 0) {
+        <span class="badge badge-sent">Connected</span>
+      }
+    </div>
+    <div class="header-actions">
+      @if (ghlConnections().length === 0) {
+        <button class="btn btn-primary" [disabled]="isConnectingGhl()" (click)="connectGhl()">
+          {{ isConnectingGhl() ? 'Redirecting to GoHighLevel…' : 'Connect GHL location' }}
+        </button>
+      } @else {
+        <button class="btn btn-secondary" [disabled]="isConnectingGhl()" (click)="connectGhl()">
+          {{ isConnectingGhl() ? 'Redirecting…' : '+ Connect Another Location' }}
+        </button>
+        <button class="btn btn-outline-danger" [disabled]="disconnectingGhlId() !== null" (click)="disconnectGhl(ghlConnections()[0].id)">
+          {{ disconnectingGhlId() === ghlConnections()[0].id ? 'Disconnecting…' : 'Logout from Connection' }}
+        </button>
+      }
+    </div>
   </div>
 
   @if (ghlConnections().length === 0) {
-    <p class="empty-state">No GHL location connected yet.</p>
+    <p class="empty-state">No GoHighLevel location connected yet. Click the button above to authorize and connect your sub-account.</p>
   } @else {
     <table>
       <thead>
         <tr>
           <th>Location</th>
           <th>Location ID</th>
-          <th>Token expires</th>
+          <th>Status</th>
+          <th>Token Expires</th>
+          <th style="text-align: right;">Action</th>
         </tr>
       </thead>
       <tbody>
         @for (c of ghlConnections(); track c.id) {
           <tr>
-            <td>{{ c.locationName }}</td>
-            <td>{{ c.locationId }}</td>
-            <td>{{ c.accessTokenExpiresAtUtc | date: 'short' }}</td>
+            <td><strong>{{ c.locationName }}</strong></td>
+            <td><code>{{ c.locationId }}</code></td>
+            <td><span class="badge badge-sent">Connected</span></td>
+            <td>{{ c.accessTokenExpiresAtUtc | date: 'medium' }}</td>
+            <td style="text-align: right;">
+              <button class="btn btn-outline-danger btn-sm" [disabled]="disconnectingGhlId() === c.id" (click)="disconnectGhl(c.id)">
+                {{ disconnectingGhlId() === c.id ? 'Disconnecting…' : 'Logout / Disconnect' }}
+              </button>
+            </td>
           </tr>
         }
       </tbody>
