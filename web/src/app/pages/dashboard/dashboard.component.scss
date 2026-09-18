@@ -57,6 +57,18 @@
       color: var(--color-success);
     }
 
+    &.stat-both .stat-value {
+      color: #7e22ce;
+    }
+
+    &.stat-ghl .stat-value {
+      color: #0284c7;
+    }
+
+    &.stat-shopify .stat-value {
+      color: #15803d;
+    }
+
     &.stat-skipped .stat-value {
       color: var(--color-warning);
     }
@@ -171,6 +183,21 @@
           border-color: #16a34a;
         }
 
+        &.pill-both.active {
+          background: #7e22ce;
+          border-color: #7e22ce;
+        }
+
+        &.pill-ghl.active {
+          background: #0284c7;
+          border-color: #0284c7;
+        }
+
+        &.pill-shopify.active {
+          background: #15803d;
+          border-color: #15803d;
+        }
+
         &.pill-skipped.active {
           background: #d97706;
           border-color: #d97706;
@@ -275,14 +302,60 @@
     color: var(--color-text);
   }
 
-  .contact-cell code {
-    background: var(--color-bg);
-    padding: 0.2rem 0.45rem;
-    border-radius: 4px;
-    font-size: 0.82rem;
-    font-family: monospace;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
+  .contact-cell {
+    .destinations-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+
+      .dest-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.2rem 0.45rem;
+        border-radius: 4px;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        width: fit-content;
+
+        .dest-tag {
+          font-size: 0.65rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          padding: 0.1rem 0.3rem;
+          border-radius: 3px;
+          letter-spacing: 0.03em;
+        }
+
+        code {
+          font-size: 0.8rem;
+          color: var(--color-text);
+          background: none;
+          border: none;
+          padding: 0;
+        }
+
+        &.dest-ghl .dest-tag {
+          background: #e0f2fe;
+          color: #0369a1;
+        }
+
+        &.dest-shopify .dest-tag {
+          background: #dcfce7;
+          color: #15803d;
+        }
+      }
+    }
+
+    code {
+      background: var(--color-bg);
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-family: monospace;
+      border: 1px solid var(--color-border);
+      color: var(--color-text);
+    }
   }
 
   .error-cell {

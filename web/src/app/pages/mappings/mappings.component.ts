@@ -4,10 +4,18 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MetaService } from '../../core/services/meta.service';
 import { GhlService } from '../../core/services/ghl.service';
+import { ShopifyService } from '../../core/services/shopify.service';
 import { MappingsService, MetaFormField } from '../../core/services/mappings.service';
 import { MetaConnection, MetaLeadForm } from '../../core/models/meta.models';
 import { GhlConnection, GhlFieldOption } from '../../core/models/ghl.models';
 import { FieldMapping, GhlTargetFieldType, GhlTargetFieldTypeLabels } from '../../core/models/mapping.models';
+import {
+  ShopifyConnection,
+  ShopifyFieldOption,
+  ShopifyFieldMapping,
+  ShopifyTargetFieldType,
+  ShopifyTargetFieldTypeLabels,
+} from '../../core/models/shopify.models';
 
 interface FormOption {
   form: MetaLeadForm;
@@ -24,10 +32,21 @@ interface FormOption {
 export class MappingsComponent implements OnInit {
   readonly formOptions = signal<FormOption[]>([]);
   readonly ghlConnections = signal<GhlConnection[]>([]);
+  readonly shopifyConnections = signal<ShopifyConnection[]>([]);
   readonly selectedFormId = signal<string | null>(null);
+
+  // Active destination tab
+  readonly activeDestinationTab = signal<'ghl' | 'shopify'>('ghl');
+
+  // GHL state
   readonly selectedGhlConnectionId = signal<string>('');
   readonly fieldMappings = signal<FieldMapping[]>([]);
   readonly isSavingLocation = signal(false);
+
+  // Shopify state
+  readonly selectedShopifyConnectionId = signal<string>('');
+  readonly shopifyFieldMappings = signal<ShopifyFieldMapping[]>([]);
+  readonly isSavingShopifyConnection = signal(false);
 
   // Meta form fields for searchable autocomplete
   readonly metaFormFields = signal<MetaFormField[]>([]);
@@ -49,10 +68,35 @@ export class MappingsComponent implements OnInit {
   newTargetType: GhlTargetFieldType = 0;
   readonly newGhlFieldKey = signal<string>('');
 
+  // Shopify fields state
+  readonly shopifyCustomerFields = signal<ShopifyFieldOption[]>([]);
+  readonly isLoadingShopifyFields = signal<boolean>(false);
+  readonly isShopifyDropdownOpen = signal<boolean>(false);
+  readonly highlightedShopifyIndex = signal<number>(-1);
+  readonly activeShopifyCategory = signal<'All' | 'Standard' | 'Custom'>('All');
+
+  readonly shopifyTargetTypeLabels = ShopifyTargetFieldTypeLabels;
+  readonly shopifyTargetTypes: ShopifyTargetFieldType[] = [0, 3, 1, 2];
+
+  readonly newShopifyMetaFieldKey = signal<string>('');
+  newShopifyTargetType: ShopifyTargetFieldType = 0;
+  readonly newShopifyFieldKey = signal<string>('');
+  readonly isShopifyMetaDropdownOpen = signal<boolean>(false);
+  readonly highlightedShopifyMetaIndex = signal<number>(-1);
+
   readonly selectedForm = computed(() => this.formOptions().find((f) => f.form.id === this.selectedFormId())?.form ?? null);
 
   readonly filteredMetaFields = computed(() => {
     const search = this.newFieldKey().trim().toLowerCase();
+    const fields = this.metaFormFields();
+    if (!search) return fields;
+    return fields.filter(
+      (f) => f.key.toLowerCase().includes(search) || f.label.toLowerCase().includes(search)
+    );
+  });
+
+  readonly filteredShopifyMetaFields = computed(() => {
+    const search = this.newShopifyMetaFieldKey().trim().toLowerCase();
     const fields = this.metaFormFields();
     if (!search) return fields;
     return fields.filter(
@@ -79,11 +123,83 @@ export class MappingsComponent implements OnInit {
     );
   });
 
+  readonly allShopifyFields = computed(() => {
+    const fromApi = this.shopifyCustomerFields();
+    const seen = new Set<string>();
+    const result: ShopifyFieldOption[] = [];
+
+    // 1. Standard & customer metafield definitions fetched from Shopify store API
+    for (const f of fromApi) {
+      const lower = f.key.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push({
+          ...f,
+          category: f.category || (f.isStandard ? 'Standard' : 'Custom Field'),
+        });
+      }
+    }
+
+    // 2. Any custom field keys already configured in saved shopifyFieldMappings
+    for (const m of this.shopifyFieldMappings()) {
+      if (m.shopifyFieldKey && !seen.has(m.shopifyFieldKey.toLowerCase())) {
+        seen.add(m.shopifyFieldKey.toLowerCase());
+        const clean = m.shopifyFieldKey.replace('custom.', '').replace(/_/g, ' ');
+        const label = clean.charAt(0).toUpperCase() + clean.slice(1);
+        result.push({
+          key: m.shopifyFieldKey,
+          label: `${label} (Mapped)`,
+          type: 'Custom',
+          isStandard: false,
+          category: 'Custom Field',
+        });
+      }
+    }
+
+    return result;
+  });
+
+  readonly shopifyTotalCount = computed(() => this.allShopifyFields().length);
+  readonly shopifyStandardCount = computed(() => this.allShopifyFields().filter((f) => f.isStandard).length);
+  readonly shopifyCustomCount = computed(() => this.allShopifyFields().filter((f) => !f.isStandard).length);
+
+  readonly hasExactShopifyMatch = computed(() => {
+    const q = this.newShopifyFieldKey().trim().toLowerCase();
+    if (!q) return true;
+    return this.allShopifyFields().some((f) => f.key.toLowerCase() === q || f.label.toLowerCase() === q);
+  });
+
+  readonly filteredShopifyFields = computed(() => {
+    const search = this.newShopifyFieldKey().trim().toLowerCase();
+    const cat = this.activeShopifyCategory();
+    let fields = this.allShopifyFields();
+
+    if (cat === 'Standard') {
+      fields = fields.filter((f) => f.isStandard);
+    } else if (cat === 'Custom') {
+      fields = fields.filter((f) => !f.isStandard);
+    }
+
+    if (!search) return fields;
+    return fields.filter(
+      (f) =>
+        f.key.toLowerCase().includes(search) ||
+        f.label.toLowerCase().includes(search) ||
+        (f.type && f.type.toLowerCase().includes(search)) ||
+        (f.category && f.category.toLowerCase().includes(search))
+    );
+  });
+
   readonly ghlTotalCount = computed(() => this.ghlLocationFields().length);
   readonly ghlContactCount = computed(() => this.ghlLocationFields().filter((f) => f.category === 'Contact').length);
   readonly ghlOpportunityCount = computed(() => this.ghlLocationFields().filter((f) => f.category === 'Opportunity').length);
 
-  constructor(private metaService: MetaService, private ghlService: GhlService, private mappingsService: MappingsService) { }
+  constructor(
+    private metaService: MetaService,
+    private ghlService: GhlService,
+    private shopifyService: ShopifyService,
+    private mappingsService: MappingsService
+  ) {}
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
@@ -93,6 +209,12 @@ export class MappingsComponent implements OnInit {
     }
     if (!target.closest('.ghl-field-autocomplete')) {
       this.isGhlDropdownOpen.set(false);
+    }
+    if (!target.closest('.shopify-meta-autocomplete')) {
+      this.isShopifyMetaDropdownOpen.set(false);
+    }
+    if (!target.closest('.shopify-field-autocomplete')) {
+      this.isShopifyDropdownOpen.set(false);
     }
   }
 
@@ -104,6 +226,16 @@ export class MappingsComponent implements OnInit {
         this.loadGhlFields(c[0].id);
       }
     });
+
+    this.shopifyService.getConnections().subscribe((c) => {
+      this.shopifyConnections.set(c);
+      if (c.length > 0 && !this.selectedShopifyConnectionId()) {
+        this.selectedShopifyConnectionId.set(c[0].id);
+        this.loadShopifyFields(c[0].id);
+      }
+    });
+
+    this.loadShopifyFields();
 
     this.metaService.getConnections().subscribe((connections: MetaConnection[]) => {
       const options: FormOption[] = [];
@@ -121,22 +253,54 @@ export class MappingsComponent implements OnInit {
 
   selectForm(formId: string): void {
     this.selectedFormId.set(formId);
-    let ghlId = this.selectedForm()?.ghlConnectionId ?? '';
+    const form = this.selectedForm();
+
+    // GHL Connection resolution
+    let ghlId = form?.ghlConnectionId ?? '';
     if (!ghlId && this.ghlConnections().length > 0) {
       ghlId = this.ghlConnections()[0].id;
     }
     this.selectedGhlConnectionId.set(ghlId);
     this.mappingsService.getFieldMappings(formId).subscribe((m) => this.fieldMappings.set(m));
 
+    // Shopify Connection resolution
+    let shopifyId = form?.shopifyConnectionId ?? '';
+    if (!shopifyId && this.shopifyConnections().length > 0) {
+      shopifyId = this.shopifyConnections()[0].id;
+    }
+    this.selectedShopifyConnectionId.set(shopifyId);
+    this.mappingsService.getShopifyFieldMappings(formId).subscribe((m) => this.shopifyFieldMappings.set(m));
+
     this.loadFormFields(formId);
     if (ghlId) {
       this.loadGhlFields(ghlId);
+    }
+    if (shopifyId) {
+      this.loadShopifyFields(shopifyId);
     }
   }
 
   onGhlConnectionChange(connId: string): void {
     this.selectedGhlConnectionId.set(connId);
     this.loadGhlFields(connId);
+  }
+
+  onShopifyConnectionChange(connId: string): void {
+    this.selectedShopifyConnectionId.set(connId);
+    this.loadShopifyFields(connId);
+  }
+
+  loadShopifyFields(connectionId?: string): void {
+    this.isLoadingShopifyFields.set(true);
+    this.shopifyService.getFields(connectionId).subscribe({
+      next: (fields) => {
+        this.shopifyCustomerFields.set(fields);
+        this.isLoadingShopifyFields.set(false);
+      },
+      error: () => {
+        this.isLoadingShopifyFields.set(false);
+      },
+    });
   }
 
   loadFormFields(formId: string): void {
@@ -171,7 +335,7 @@ export class MappingsComponent implements OnInit {
     });
   }
 
-  // Meta Field Methods
+  // Meta Field Methods (GHL tab)
   openFieldDropdown(): void {
     this.isFieldDropdownOpen.set(true);
     if (this.highlightedMetaIndex() < 0 && this.filteredMetaFields().length > 0) {
@@ -315,6 +479,98 @@ export class MappingsComponent implements OnInit {
     }
   }
 
+  // Shopify Meta autocomplete methods
+  openShopifyMetaDropdown(): void {
+    this.isShopifyMetaDropdownOpen.set(true);
+    if (this.highlightedShopifyMetaIndex() < 0 && this.filteredShopifyMetaFields().length > 0) {
+      this.highlightedShopifyMetaIndex.set(0);
+    }
+  }
+
+  toggleShopifyMetaDropdown(): void {
+    if (this.isShopifyMetaDropdownOpen()) {
+      this.isShopifyMetaDropdownOpen.set(false);
+    } else {
+      this.openShopifyMetaDropdown();
+    }
+  }
+
+  onShopifyMetaInput(val: string): void {
+    this.newShopifyMetaFieldKey.set(val);
+    this.openShopifyMetaDropdown();
+    this.highlightedShopifyMetaIndex.set(0);
+  }
+
+  clearShopifyMetaInput(): void {
+    this.newShopifyMetaFieldKey.set('');
+    this.openShopifyMetaDropdown();
+    this.highlightedShopifyMetaIndex.set(0);
+  }
+
+  selectShopifyMetaField(field: MetaFormField): void {
+    this.newShopifyMetaFieldKey.set(field.key);
+    this.isShopifyMetaDropdownOpen.set(false);
+    this.highlightedShopifyMetaIndex.set(-1);
+  }
+
+  // Shopify Customer fields autocomplete methods
+  openShopifyDropdown(): void {
+    this.isShopifyDropdownOpen.set(true);
+    if (this.highlightedShopifyIndex() < 0 && this.filteredShopifyFields().length > 0) {
+      this.highlightedShopifyIndex.set(0);
+    }
+  }
+
+  toggleShopifyDropdown(): void {
+    if (this.isShopifyDropdownOpen()) {
+      this.isShopifyDropdownOpen.set(false);
+    } else {
+      this.openShopifyDropdown();
+    }
+  }
+
+  onShopifyInput(val: string): void {
+    this.newShopifyFieldKey.set(val);
+    this.openShopifyDropdown();
+    this.highlightedShopifyIndex.set(0);
+  }
+
+  clearShopifyInput(): void {
+    this.newShopifyFieldKey.set('');
+    this.openShopifyDropdown();
+    this.highlightedShopifyIndex.set(0);
+  }
+
+  setShopifyCategory(cat: 'All' | 'Standard' | 'Custom'): void {
+    this.activeShopifyCategory.set(cat);
+    this.highlightedShopifyIndex.set(-1);
+  }
+
+  selectShopifyField(field: ShopifyFieldOption): void {
+    this.newShopifyFieldKey.set(field.key);
+    if (field.isStandard) {
+      if (field.key === 'tags') {
+        this.newShopifyTargetType = 1; // Tag
+      } else if (field.key === 'note') {
+        this.newShopifyTargetType = 2; // Note
+      } else {
+        this.newShopifyTargetType = 0; // StandardCustomerField
+      }
+    } else {
+      this.newShopifyTargetType = 3; // CustomField
+    }
+    this.isShopifyDropdownOpen.set(false);
+    this.highlightedShopifyIndex.set(-1);
+  }
+
+  selectCustomShopifyField(key: string): void {
+    if (!key) return;
+    this.newShopifyFieldKey.set(key);
+    this.newShopifyTargetType = 3; // CustomField
+    this.isShopifyDropdownOpen.set(false);
+    this.highlightedShopifyIndex.set(-1);
+  }
+
   private scrollToHighlighted(prefix: 'meta' | 'ghl', index: number): void {
     setTimeout(() => {
       const el = document.getElementById(`${prefix}-opt-${index}`);
@@ -341,6 +597,22 @@ export class MappingsComponent implements OnInit {
     });
   }
 
+  saveShopifyConnection(): void {
+    const formId = this.selectedFormId();
+    const shopifyId = this.selectedShopifyConnectionId();
+    if (!formId || !shopifyId) return;
+
+    this.isSavingShopifyConnection.set(true);
+    this.mappingsService.setFormShopifyConnection(formId, shopifyId).subscribe({
+      next: () => {
+        this.isSavingShopifyConnection.set(false);
+        const form = this.selectedForm();
+        if (form) form.shopifyConnectionId = shopifyId;
+      },
+      error: () => this.isSavingShopifyConnection.set(false),
+    });
+  }
+
   addFieldMapping(): void {
     const formId = this.selectedFormId();
     const fieldKey = this.newFieldKey().trim();
@@ -362,6 +634,35 @@ export class MappingsComponent implements OnInit {
   deleteFieldMapping(mapping: FieldMapping): void {
     this.mappingsService.deleteFieldMapping(mapping.id).subscribe(() => {
       this.fieldMappings.update((list) => list.filter((m) => m.id !== mapping.id));
+    });
+  }
+
+  addShopifyFieldMapping(): void {
+    const formId = this.selectedFormId();
+    const fieldKey = this.newShopifyMetaFieldKey().trim();
+    const shopifyKey = this.newShopifyFieldKey().trim();
+    if (!formId || !fieldKey || !shopifyKey) return;
+
+    this.mappingsService
+      .upsertShopifyFieldMapping({
+        metaLeadFormId: formId,
+        metaFieldKey: fieldKey,
+        targetType: this.newShopifyTargetType,
+        shopifyFieldKey: shopifyKey,
+      })
+      .subscribe((mapping) => {
+        this.shopifyFieldMappings.update((list) => [...list.filter((m) => m.metaFieldKey !== mapping.metaFieldKey), mapping]);
+        this.newShopifyMetaFieldKey.set('');
+        this.newShopifyFieldKey.set('');
+        this.newShopifyTargetType = 0;
+        this.isShopifyMetaDropdownOpen.set(false);
+        this.isShopifyDropdownOpen.set(false);
+      });
+  }
+
+  deleteShopifyFieldMapping(mapping: ShopifyFieldMapping): void {
+    this.mappingsService.deleteShopifyFieldMapping(mapping.id).subscribe(() => {
+      this.shopifyFieldMappings.update((list) => list.filter((m) => m.id !== mapping.id));
     });
   }
 }

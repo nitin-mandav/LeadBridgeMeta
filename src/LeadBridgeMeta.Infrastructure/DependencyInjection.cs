@@ -4,6 +4,7 @@ using LeadBridgeMeta.Application.Ghl;
 using LeadBridgeMeta.Application.Leads;
 using LeadBridgeMeta.Application.Mappings;
 using LeadBridgeMeta.Application.Meta;
+using LeadBridgeMeta.Application.Shopify;
 using LeadBridgeMeta.Infrastructure.Auth;
 using LeadBridgeMeta.Infrastructure.Ghl;
 using LeadBridgeMeta.Infrastructure.Identity;
@@ -12,6 +13,7 @@ using LeadBridgeMeta.Infrastructure.Mappings;
 using LeadBridgeMeta.Infrastructure.Meta;
 using LeadBridgeMeta.Infrastructure.Persistence;
 using LeadBridgeMeta.Infrastructure.Security;
+using LeadBridgeMeta.Infrastructure.Shopify;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -41,10 +43,12 @@ public static class DependencyInjection
 
         services.Configure<MetaOptions>(configuration.GetSection(MetaOptions.SectionName));
         services.Configure<GhlOptions>(configuration.GetSection(GhlOptions.SectionName));
+        services.Configure<ShopifyOptions>(configuration.GetSection(ShopifyOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         services.AddHttpClient<IMetaGraphClient, MetaGraphClient>();
         services.AddHttpClient<IGhlClient, GhlClient>();
+        services.AddHttpClient<IShopifyClient, ShopifyClient>();
 
         services.AddScoped<ITokenProtector, DataProtectionTokenProtector>();
         services.AddScoped<IOAuthStateService, OAuthStateService>();
@@ -52,7 +56,9 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<ILeadProcessingService, LeadProcessingService>();
         services.AddScoped<IGhlConnectionService, GhlConnectionService>();
+        services.AddScoped<IShopifyConnectionService, ShopifyConnectionService>();
         services.AddScoped<IMappingService, MappingService>();
+        services.AddScoped<IShopifyMappingService, ShopifyMappingService>();
         services.AddScoped<IMetaWebhookService, MetaWebhookService>();
 
         services.AddSingleton<IMetaWebhookQueue, MetaWebhookQueue>();

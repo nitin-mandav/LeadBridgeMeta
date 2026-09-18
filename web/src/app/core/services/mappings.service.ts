@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { FieldMapping, FieldMappingRequest } from '../models/mapping.models';
+import { ShopifyFieldMapping, ShopifyFieldMappingRequest } from '../models/shopify.models';
 
 @Injectable({ providedIn: 'root' })
 export class MappingsService {
@@ -12,6 +13,10 @@ export class MappingsService {
 
   setFormGhlConnection(formId: string, ghlConnectionId: string): Observable<void> {
     return this.http.put<void>(`${this.base}/forms/${formId}/ghl-connection`, { ghlConnectionId });
+  }
+
+  setFormShopifyConnection(formId: string, shopifyConnectionId: string): Observable<void> {
+    return this.http.put<void>(`${this.base}/forms/${formId}/shopify-connection`, { shopifyConnectionId });
   }
 
   getFieldMappings(formId: string | null): Observable<FieldMapping[]> {
@@ -29,6 +34,19 @@ export class MappingsService {
 
   deleteFieldMapping(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/fields/${id}`);
+  }
+
+  getShopifyFieldMappings(formId: string | null): Observable<ShopifyFieldMapping[]> {
+    const query = formId ? `?formId=${formId}` : '';
+    return this.http.get<ShopifyFieldMapping[]>(`${this.base}/shopify/fields${query}`);
+  }
+
+  upsertShopifyFieldMapping(request: ShopifyFieldMappingRequest): Observable<ShopifyFieldMapping> {
+    return this.http.post<ShopifyFieldMapping>(`${this.base}/shopify/fields`, request);
+  }
+
+  deleteShopifyFieldMapping(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/shopify/fields/${id}`);
   }
 }
 

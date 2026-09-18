@@ -16,7 +16,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<MetaPage> MetaPages => Set<MetaPage>();
     public DbSet<MetaLeadForm> MetaLeadForms => Set<MetaLeadForm>();
     public DbSet<GhlConnection> GhlConnections => Set<GhlConnection>();
+    public DbSet<ShopifyConnection> ShopifyConnections => Set<ShopifyConnection>();
     public DbSet<FieldMapping> FieldMappings => Set<FieldMapping>();
+    public DbSet<ShopifyFieldMapping> ShopifyFieldMappings => Set<ShopifyFieldMapping>();
     public DbSet<LeadEvent> LeadEvents => Set<LeadEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -45,10 +47,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
         builder.Entity<MetaLeadForm>(e =>
         {
             e.HasOne(x => x.MetaPage).WithMany(p => p.LeadForms).HasForeignKey(x => x.MetaPageId).OnDelete(DeleteBehavior.Cascade);
-            // ClientSetNull (not SetNull): a DB-level ON DELETE SET NULL here plus the cascade path
-            // Tenant -> MetaConnection -> MetaPage -> MetaLeadForm gives SQL Server two cascade paths into
-            // MetaLeadForms, which it rejects at migration time. EF nulls the FK app-side instead.
+            // ClientSetNull (not SetNull): avoid multiple cascade paths in SQL Server
             e.HasOne(x => x.GhlConnection).WithMany(g => g.MappedForms).HasForeignKey(x => x.GhlConnectionId).OnDelete(DeleteBehavior.ClientSetNull);
+            e.HasOne(x => x.ShopifyConnection).WithMany(s => s.MappedForms).HasForeignKey(x => x.ShopifyConnectionId).OnDelete(DeleteBehavior.ClientSetNull);
             e.Property(x => x.FormId).HasMaxLength(64).IsRequired();
             e.HasIndex(x => x.FormId).IsUnique();
         });
@@ -60,15 +61,27 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
             e.HasIndex(x => new { x.TenantId, x.LocationId }).IsUnique();
         });
 
+        builder.Entity<ShopifyConnection>(e =>
+        {
+            e.HasOne(x => x.Tenant).WithMany(t => t.ShopifyConnections).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.ShopDomain).HasMaxLength(256).IsRequired();
+            e.HasIndex(x => new { x.TenantId, x.ShopDomain }).IsUnique();
+        });
+
         builder.Entity<FieldMapping>(e =>
         {
-            // Restrict (not Cascade): FieldMapping is also reachable from Tenant via
-            // Tenant -> MetaConnection -> MetaPage -> MetaLeadForm -> FieldMapping, so a second cascading
-            // FK straight from Tenant hits the same "multiple cascade paths" rejection as above.
             e.HasOne(x => x.Tenant).WithMany(t => t.FieldMappings).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.MetaLeadForm).WithMany(f => f.FieldMappings).HasForeignKey(x => x.MetaLeadFormId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.MetaFieldKey).HasMaxLength(200).IsRequired();
             e.Property(x => x.GhlFieldKey).HasMaxLength(200).IsRequired();
+        });
+
+        builder.Entity<ShopifyFieldMapping>(e =>
+        {
+            e.HasOne(x => x.Tenant).WithMany(t => t.ShopifyFieldMappings).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.MetaLeadForm).WithMany(f => f.ShopifyFieldMappings).HasForeignKey(x => x.MetaLeadFormId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.MetaFieldKey).HasMaxLength(200).IsRequired();
+            e.Property(x => x.ShopifyFieldKey).HasMaxLength(200).IsRequired();
         });
 
         builder.Entity<LeadEvent>(e =>

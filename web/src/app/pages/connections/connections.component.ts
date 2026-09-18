@@ -1,21 +1,25 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { MetaService } from '../../core/services/meta.service';
 import { GhlService } from '../../core/services/ghl.service';
+import { ShopifyService } from '../../core/services/shopify.service';
 import { MetaConnection } from '../../core/models/meta.models';
 import { GhlConnection } from '../../core/models/ghl.models';
+import { ShopifyConnection } from '../../core/models/shopify.models';
 
 @Component({
   selector: 'app-connections',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './connections.component.html',
   styleUrl: './connections.component.scss',
 })
 export class ConnectionsComponent implements OnInit {
   readonly metaConnections = signal<MetaConnection[]>([]);
   readonly ghlConnections = signal<GhlConnection[]>([]);
+  readonly shopifyConnections = signal<ShopifyConnection[]>([]);
   readonly isLoading = signal(true);
   readonly subscribingPageId = signal<string | null>(null);
   readonly unsubscribingPageId = signal<string | null>(null);
@@ -24,17 +28,27 @@ export class ConnectionsComponent implements OnInit {
 
   readonly isConnectingGhl = signal(false);
   readonly isConnectingMeta = signal(false);
+  readonly isConnectingShopify = signal(false);
   readonly disconnectingGhlId = signal<string | null>(null);
   readonly disconnectingMetaId = signal<string | null>(null);
+  readonly disconnectingShopifyId = signal<string | null>(null);
+  readonly shopifyStoreDomain = signal<string>('');
 
-  constructor(private metaService: MetaService, private ghlService: GhlService, private route: ActivatedRoute) {}
+  constructor(
+    private metaService: MetaService,
+    private ghlService: GhlService,
+    private shopifyService: ShopifyService,
+    private route: ActivatedRoute
+  ) {}
 
   ngOnInit(): void {
     const params = this.route.snapshot.queryParamMap;
     if (params.get('meta_connected')) this.notice.set({ kind: 'success', text: 'Meta account connected successfully.' });
     if (params.get('ghl_connected')) this.notice.set({ kind: 'success', text: 'GoHighLevel location connected successfully.' });
+    if (params.get('shopify_connected')) this.notice.set({ kind: 'success', text: 'Shopify store connected successfully.' });
     if (params.get('meta_error')) this.notice.set({ kind: 'error', text: params.get('meta_error')! });
     if (params.get('ghl_error')) this.notice.set({ kind: 'error', text: params.get('ghl_error')! });
+    if (params.get('shopify_error')) this.notice.set({ kind: 'error', text: params.get('shopify_error')! });
 
     this.load();
   }
@@ -42,6 +56,10 @@ export class ConnectionsComponent implements OnInit {
   load(): void {
     this.isLoading.set(true);
     this.metaService.getConnections().subscribe((c) => this.metaConnections.set(c));
+    this.shopifyService.getConnections().subscribe({
+      next: (c) => this.shopifyConnections.set(c),
+      error: () => {},
+    });
     this.ghlService.getConnections().subscribe({
       next: (c) => {
         this.ghlConnections.set(c);
@@ -156,6 +174,40 @@ export class ConnectionsComponent implements OnInit {
         const errMsg = err?.error?.error || err?.error?.message || (err?.status ? `Server returned HTTP ${err.status} (${err.statusText || 'Not Found - please restart .NET API'})` : `Failed to sync forms for "${pageName}".`);
         this.notice.set({ kind: 'error', text: errMsg });
       },
+    });
+  }
+
+  connectShopify(): void {
+    const shop = this.shopifyStoreDomain().trim();
+    if (!shop) {
+      this.notice.set({ kind: 'error', text: 'Please enter your Shopify store domain (e.g. your-store.myshopify.com).' });
+      return;
+    }
+    this.isConnectingShopify.set(true);
+    this.shopifyService.getConnectUrl(shop).subscribe({
+      next: (res) => (window.location.href = res.url),
+      error: (err) => {
+        this.isConnectingShopify.set(false);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to initiate Shopify connection.' });
+      }
+    });
+  }
+
+  disconnectShopify(connectionId: string): void {
+    if (!confirm('Are you sure you want to disconnect this Shopify store?')) {
+      return;
+    }
+    this.disconnectingShopifyId.set(connectionId);
+    this.shopifyService.disconnect(connectionId).subscribe({
+      next: () => {
+        this.disconnectingShopifyId.set(null);
+        this.notice.set({ kind: 'success', text: 'Shopify store disconnected successfully.' });
+        this.load();
+      },
+      error: (err) => {
+        this.disconnectingShopifyId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to disconnect Shopify store.' });
+      }
     });
   }
 }

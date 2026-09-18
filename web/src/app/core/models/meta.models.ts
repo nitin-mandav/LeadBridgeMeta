@@ -4,6 +4,7 @@ export interface MetaLeadForm {
   formName: string;
   isActive: boolean;
   ghlConnectionId: string | null;
+  shopifyConnectionId?: string | null;
 }
 
 export interface MetaPage {

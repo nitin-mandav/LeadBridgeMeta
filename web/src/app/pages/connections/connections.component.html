@@ -120,3 +120,63 @@
     </table>
   }
 </div>
+
+<div class="card section">
+  <div class="section-header">
+    <div class="header-title-group">
+      <h2>Shopify</h2>
+      @if (shopifyConnections().length > 0) {
+        <span class="badge badge-sent">Connected</span>
+      }
+    </div>
+  </div>
+
+  <p class="muted" style="margin-bottom: 1rem;">
+    Connect your Shopify store to automatically sync Meta lead form submissions as Shopify customers.
+  </p>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center; max-width: 550px; margin-bottom: 1.25rem;">
+    <input
+      type="text"
+      [ngModel]="shopifyStoreDomain()"
+      (ngModelChange)="shopifyStoreDomain.set($event)"
+      placeholder="your-store.myshopify.com"
+      style="flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius); font-size: 0.9rem;"
+      (keydown.enter)="connectShopify()"
+    />
+    <button class="btn btn-primary" [disabled]="isConnectingShopify() || !shopifyStoreDomain().trim()" (click)="connectShopify()">
+      {{ isConnectingShopify() ? 'Connecting…' : 'Connect Shopify Store' }}
+    </button>
+  </div>
+
+  @if (shopifyConnections().length === 0) {
+    <p class="empty-state">No Shopify store connected yet. Enter your myshopify.com domain above and click Connect.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Store Name</th>
+          <th>Store Domain</th>
+          <th>Status</th>
+          <th>Connected At</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of shopifyConnections(); track c.id) {
+          <tr>
+            <td><strong>{{ c.shopName }}</strong></td>
+            <td><code>{{ c.shopDomain }}</code></td>
+            <td><span class="badge badge-sent">Connected</span></td>
+            <td>{{ c.createdAtUtc | date: 'medium' }}</td>
+            <td style="text-align: right;">
+              <button class="btn btn-outline-danger btn-sm" [disabled]="disconnectingShopifyId() === c.id" (click)="disconnectShopify(c.id)">
+                {{ disconnectingShopifyId() === c.id ? 'Disconnecting…' : 'Disconnect' }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

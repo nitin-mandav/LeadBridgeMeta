@@ -8,6 +8,7 @@ public record LeadEventDto(
     string FormName,
     LeadEventStatus Status,
     string? GhlContactId,
+    string? ShopifyCustomerId,
     string? ErrorMessage,
     int RetryCount,
     DateTime ReceivedAtUtc,

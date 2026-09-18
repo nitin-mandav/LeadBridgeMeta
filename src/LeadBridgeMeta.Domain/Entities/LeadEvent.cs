@@ -24,6 +24,7 @@ public class LeadEvent
 
     public LeadEventStatus Status { get; set; } = LeadEventStatus.Received;
     public string? GhlContactId { get; set; }
+    public string? ShopifyCustomerId { get; set; }
     public string? ErrorMessage { get; set; }
     public int RetryCount { get; set; }
 

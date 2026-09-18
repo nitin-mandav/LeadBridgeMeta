@@ -1,5 +1,5 @@
 <h1>Field Mapping</h1>
-<p class="page-subtitle">Pick a Meta lead form, send it to a GHL location, and map each question to a GHL field.</p>
+<p class="page-subtitle">Pick a Meta lead form, assign sync destinations (GoHighLevel, Shopify), and map each question to destination fields.</p>
 
 @if (formOptions().length === 0) {
 <div class="card" style="text-align: center; padding: 2.5rem 1.5rem;">
@@ -13,7 +13,7 @@
 } @else {
 <div class="card section">
   <div class="field">
-    <label for="formSelect">Meta lead form</label>
+    <label for="formSelect" style="font-weight: 600; font-size: 0.95rem;">Meta lead form</label>
     <select id="formSelect" [ngModel]="selectedFormId()" (ngModelChange)="selectForm($event)">
       @for (opt of formOptions(); track opt.form.id) {
       <option [value]="opt.form.id">{{ opt.pageName }} — {{ opt.form.formName }}</option>
@@ -21,29 +21,74 @@
     </select>
   </div>
 
-  <div class="field">
-    <label for="ghlSelect">Send leads to GHL location</label>
-    <div class="inline">
-      <select id="ghlSelect" [ngModel]="selectedGhlConnectionId()" (ngModelChange)="onGhlConnectionChange($event)">
-        @if (!selectedGhlConnectionId() || ghlConnections().length === 0) {
-          <option value="" disabled>Select a location…</option>
+  <div class="destinations-grid">
+    <div class="field">
+      <label for="ghlSelect" style="display: flex; align-items: center; justify-content: space-between;">
+        <span>Send leads to GHL location</span>
+        @if (selectedForm()?.ghlConnectionId) {
+          <span class="badge badge-sent" style="font-size: 0.72rem;">Configured</span>
         }
-        @for (c of ghlConnections(); track c.id) {
-          <option [value]="c.id">{{ c.locationName }}</option>
+      </label>
+      <div class="inline">
+        <select id="ghlSelect" [ngModel]="selectedGhlConnectionId()" (ngModelChange)="onGhlConnectionChange($event)">
+          <option value="">Do not send to GHL</option>
+          @for (c of ghlConnections(); track c.id) {
+            <option [value]="c.id">{{ c.locationName }}</option>
+          }
+        </select>
+        <button class="btn btn-primary" [disabled]="isSavingLocation()" (click)="saveGhlConnection()">
+          {{ isSavingLocation() ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="shopifySelect" style="display: flex; align-items: center; justify-content: space-between;">
+        <span>Send leads to Shopify store</span>
+        @if (selectedForm()?.shopifyConnectionId) {
+          <span class="badge badge-sent" style="font-size: 0.72rem;">Configured</span>
         }
-      </select>
-      <button class="btn btn-primary" [disabled]="isSavingLocation() || !selectedGhlConnectionId()"
-        (click)="saveGhlConnection()">
-        {{ isSavingLocation() ? 'Saving…' : 'Save' }}
-      </button>
+      </label>
+      <div class="inline">
+        <select id="shopifySelect" [ngModel]="selectedShopifyConnectionId()" (ngModelChange)="onShopifyConnectionChange($event)">
+          <option value="">Do not send to Shopify</option>
+          @for (c of shopifyConnections(); track c.id) {
+            <option [value]="c.id">{{ c.shopName }} ({{ c.shopDomain }})</option>
+          }
+        </select>
+        <button class="btn btn-primary" [disabled]="isSavingShopifyConnection()" (click)="saveShopifyConnection()">
+          {{ isSavingShopifyConnection() ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- Destination Tabs -->
+<div class="destination-tabs-container">
+  <button
+    type="button"
+    class="dest-tab"
+    [class.active]="activeDestinationTab() === 'ghl'"
+    (click)="activeDestinationTab.set('ghl')">
+    <span>GoHighLevel Mappings</span>
+    <span class="tab-badge">{{ fieldMappings().length }}</span>
+  </button>
+  <button
+    type="button"
+    class="dest-tab"
+    [class.active]="activeDestinationTab() === 'shopify'"
+    (click)="activeDestinationTab.set('shopify')">
+    <span>Shopify Customer Mappings</span>
+    <span class="tab-badge">{{ shopifyFieldMappings().length }}</span>
+  </button>
+</div>
+
+<!-- GoHighLevel Mappings Tab -->
+@if (activeDestinationTab() === 'ghl') {
 <div class="card section">
-  <h2>Field mappings for this form</h2>
-  <p class="muted">Common fields (email, name, phone) map automatically. Add rows below for custom questions or tags.
-  </p>
+  <h2>GoHighLevel Field Mappings</h2>
+  <p class="muted">Common contact fields (email, name, phone) map automatically. Add rows below for custom questions or tags.</p>
 
   <table>
     <thead>
@@ -232,4 +277,193 @@
     </tbody>
   </table>
 </div>
+}
+
+<!-- Shopify Mappings Tab -->
+@if (activeDestinationTab() === 'shopify') {
+<div class="card section">
+  <h2>Shopify Customer Field Mappings</h2>
+  <p class="muted">Standard fields (email, first_name, last_name, phone) match automatically. Map additional questions to customer fields, note attributes, or tags.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40%">Meta field key</th>
+        <th style="width: 25%">Shopify target</th>
+        <th style="width: 25%">Shopify customer field key</th>
+        <th style="width: 10%"></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (m of shopifyFieldMappings(); track m.id) {
+      <tr>
+        <td><code>{{ m.metaFieldKey }}</code></td>
+        <td>{{ shopifyTargetTypeLabels[m.targetType] }}</td>
+        <td><code>{{ m.shopifyFieldKey }}</code></td>
+        <td><button class="btn btn-secondary" (click)="deleteShopifyFieldMapping(m)">Remove</button></td>
+      </tr>
+      }
+      <tr>
+        <td>
+          <div class="searchable-dropdown-container shopify-meta-autocomplete">
+            <div class="input-with-icon" [class.has-clear]="!!newShopifyMetaFieldKey()">
+              <input type="text"
+                [ngModel]="newShopifyMetaFieldKey()"
+                (ngModelChange)="onShopifyMetaInput($event)"
+                placeholder="Select question or type key…"
+                (focus)="openShopifyMetaDropdown(); $any($event.target).select()"
+                (click)="openShopifyMetaDropdown()"
+                autocomplete="off" />
+
+              @if (newShopifyMetaFieldKey()) {
+              <button type="button" class="clear-btn" (click)="clearShopifyMetaInput(); $event.stopPropagation()" title="Clear text">
+                ✕
+              </button>
+              }
+
+              <button type="button" class="dropdown-toggle-btn"
+                (mousedown)="$event.preventDefault(); toggleShopifyMetaDropdown()" title="Toggle form fields list">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+
+            @if (isShopifyMetaDropdownOpen()) {
+            <div class="dropdown-panel" (mousedown)="$event.preventDefault()">
+              @if (isLoadingFields()) {
+              <div class="dropdown-status">Loading form questions…</div>
+              } @else if (filteredShopifyMetaFields().length === 0) {
+              <div class="dropdown-status">
+                <span>No matching form fields.</span>
+                @if (newShopifyMetaFieldKey()) {
+                <span class="custom-note">Press "Add" to use "<strong>{{ newShopifyMetaFieldKey() }}</strong>"</span>
+                }
+              </div>
+              } @else {
+              <div class="dropdown-header">
+                <span>Form Questions ({{ filteredShopifyMetaFields().length }})</span>
+              </div>
+              <ul class="dropdown-list">
+                @for (f of filteredShopifyMetaFields(); track f.key; let i = $index) {
+                <li class="dropdown-item"
+                    [class.highlighted]="i === highlightedShopifyMetaIndex()"
+                    (click)="selectShopifyMetaField(f)">
+                  <div class="item-main">
+                    <span class="item-label">{{ f.label }}</span>
+                    <span class="item-key">{{ f.key }}</span>
+                  </div>
+                  @if (f.type) {
+                  <span class="item-type-badge">{{ f.type }}</span>
+                  }
+                </li>
+                }
+              </ul>
+              }
+            </div>
+            }
+          </div>
+        </td>
+        <td>
+          <select [(ngModel)]="newShopifyTargetType">
+            @for (t of shopifyTargetTypes; track t) {
+            <option [value]="t">{{ shopifyTargetTypeLabels[t] }}</option>
+            }
+          </select>
+        </td>
+        <td>
+          <div class="searchable-dropdown-container shopify-field-autocomplete">
+            <div class="input-with-icon" [class.has-clear]="!!newShopifyFieldKey()">
+              <input type="text"
+                [ngModel]="newShopifyFieldKey()"
+                (ngModelChange)="onShopifyInput($event)"
+                placeholder="Select Shopify field or type key…"
+                (focus)="openShopifyDropdown(); $any($event.target).select()"
+                (click)="openShopifyDropdown()"
+                autocomplete="off" />
+
+              @if (newShopifyFieldKey()) {
+              <button type="button" class="clear-btn" (click)="clearShopifyInput(); $event.stopPropagation()" title="Clear text">
+                ✕
+              </button>
+              }
+
+              <button type="button" class="dropdown-toggle-btn"
+                (mousedown)="$event.preventDefault(); toggleShopifyDropdown()" title="Toggle Shopify fields list">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+
+            @if (isShopifyDropdownOpen()) {
+            <div class="dropdown-panel dropdown-panel-right" (mousedown)="$event.preventDefault()">
+              <!-- Category Filter Tabs -->
+              <div class="category-tabs">
+                <button type="button" class="cat-tab"
+                  [class.active]="activeShopifyCategory() === 'All'"
+                  (click)="setShopifyCategory('All')">
+                  All ({{ shopifyTotalCount() }})
+                </button>
+                <button type="button" class="cat-tab"
+                  [class.active]="activeShopifyCategory() === 'Standard'"
+                  (click)="setShopifyCategory('Standard')">
+                  Standard ({{ shopifyStandardCount() }})
+                </button>
+                <button type="button" class="cat-tab"
+                  [class.active]="activeShopifyCategory() === 'Custom'"
+                  (click)="setShopifyCategory('Custom')">
+                  Custom ({{ shopifyCustomCount() }})
+                </button>
+              </div>
+
+              @if (filteredShopifyFields().length === 0) {
+              <div class="dropdown-status">
+                <span>No matching Shopify fields in "{{ activeShopifyCategory() }}".</span>
+                @if (newShopifyFieldKey()) {
+                <span class="custom-note" style="cursor: pointer;" (click)="selectCustomShopifyField(newShopifyFieldKey())">
+                  Click here to use "<strong>{{ newShopifyFieldKey() }}</strong>" as custom field
+                </span>
+                }
+              </div>
+              } @else {
+              <ul class="dropdown-list">
+                @for (f of filteredShopifyFields(); track f.key; let i = $index) {
+                <li class="dropdown-item"
+                    [class.highlighted]="i === highlightedShopifyIndex()"
+                    (click)="selectShopifyField(f)">
+                  <div class="item-main">
+                    <span class="item-label">{{ f.label }}</span>
+                    <span class="item-key">{{ f.key }}</span>
+                  </div>
+                  <div class="badges-group">
+                    <span class="category-badge" [attr.data-cat]="f.isStandard ? 'Standard' : 'Custom Field'">
+                      {{ f.isStandard ? 'Standard' : 'Custom' }}
+                    </span>
+                    <span class="item-type-badge" [class.badge-standard]="f.isStandard" [class.badge-custom]="!f.isStandard">
+                      {{ f.isStandard ? 'Standard' : (f.type || 'Custom') }}
+                    </span>
+                  </div>
+                </li>
+                }
+              </ul>
+              }
+
+              @if (newShopifyFieldKey() && !hasExactShopifyMatch()) {
+              <div class="dropdown-status" style="border-top: 1px solid var(--color-border); padding: 0.5rem; text-align: left;">
+                <button type="button" class="btn btn-secondary btn-sm" style="width: 100%; font-size: 0.8rem; text-align: left;" (click)="selectCustomShopifyField(newShopifyFieldKey())">
+                  + Use "<strong>{{ newShopifyFieldKey() }}</strong>" as Custom Field
+                </button>
+              </div>
+              }
+            </div>
+            }
+          </div>
+        </td>
+        <td><button class="btn btn-primary" (click)="addShopifyFieldMapping()">Add</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+}
 }

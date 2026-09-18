@@ -14,6 +14,7 @@ export interface LeadEvent {
   formName: string;
   status: LeadEventStatus;
   ghlContactId: string | null;
+  shopifyCustomerId: string | null;
   errorMessage: string | null;
   retryCount: number;
   receivedAtUtc: string;

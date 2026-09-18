@@ -14,6 +14,11 @@ public class MetaLeadForm
     public Guid? GhlConnectionId { get; set; }
     public GhlConnection? GhlConnection { get; set; }
 
+    /// <summary>Which Shopify store new leads from this form should be sent to. Null until mapped.</summary>
+    public Guid? ShopifyConnectionId { get; set; }
+    public ShopifyConnection? ShopifyConnection { get; set; }
+
     public ICollection<FieldMapping> FieldMappings { get; set; } = new List<FieldMapping>();
+    public ICollection<ShopifyFieldMapping> ShopifyFieldMappings { get; set; } = new List<ShopifyFieldMapping>();
     public ICollection<LeadEvent> LeadEvents { get; set; } = new List<LeadEvent>();
 }

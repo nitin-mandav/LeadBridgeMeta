@@ -7,6 +7,8 @@ using LeadBridgeMeta.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using LeadBridgeMeta.Application.Shopify;
+
 namespace LeadBridgeMeta.Infrastructure.Leads;
 
 public class LeadProcessingService : ILeadProcessingService
@@ -28,6 +30,7 @@ public class LeadProcessingService : ILeadProcessingService
     private readonly IAppDbContext _db;
     private readonly IMetaGraphClient _meta;
     private readonly IGhlClient _ghl;
+    private readonly IShopifyClient _shopify;
     private readonly ITokenProtector _protector;
     private readonly ILogger<LeadProcessingService> _logger;
 
@@ -35,12 +38,14 @@ public class LeadProcessingService : ILeadProcessingService
         IAppDbContext db,
         IMetaGraphClient meta,
         IGhlClient ghl,
+        IShopifyClient shopify,
         ITokenProtector protector,
         ILogger<LeadProcessingService> logger)
     {
         _db = db;
         _meta = meta;
         _ghl = ghl;
+        _shopify = shopify;
         _protector = protector;
         _logger = logger;
     }
@@ -92,6 +97,8 @@ public class LeadProcessingService : ILeadProcessingService
         var form = await _db.MetaLeadForms
             .Include(f => f.FieldMappings)
             .Include(f => f.GhlConnection)
+            .Include(f => f.ShopifyFieldMappings)
+            .Include(f => f.ShopifyConnection)
             .Include(f => f.MetaPage)
             .FirstOrDefaultAsync(f => f.FormId == formId, ct);
 
@@ -127,6 +134,8 @@ public class LeadProcessingService : ILeadProcessingService
         var form = await _db.MetaLeadForms
             .Include(f => f.FieldMappings)
             .Include(f => f.GhlConnection)
+            .Include(f => f.ShopifyFieldMappings)
+            .Include(f => f.ShopifyConnection)
             .Include(f => f.MetaPage).ThenInclude(p => p!.MetaConnection)
             .FirstOrDefaultAsync(f => f.Id == leadEvent.MetaLeadFormId, ct)
                    ?? throw new InvalidOperationException($"Meta lead form {leadEvent.MetaLeadFormId} not found.");
@@ -164,6 +173,7 @@ public class LeadProcessingService : ILeadProcessingService
                 l.MetaLeadForm != null ? l.MetaLeadForm.FormName : "(Unknown)",
                 l.Status,
                 l.GhlContactId,
+                l.ShopifyCustomerId,
                 l.ErrorMessage,
                 l.RetryCount,
                 l.ReceivedAtUtc,
@@ -203,6 +213,7 @@ public class LeadProcessingService : ILeadProcessingService
             lead.MetaLeadForm?.FormName ?? "(Unknown)",
             lead.Status,
             lead.GhlContactId,
+            lead.ShopifyCustomerId,
             lead.ErrorMessage,
             lead.RetryCount,
             lead.ReceivedAtUtc,
@@ -225,10 +236,13 @@ public class LeadProcessingService : ILeadProcessingService
                 return;
             }
 
-            if (form.GhlConnectionId is null || form.GhlConnection is null)
+            var hasGhl = form.GhlConnectionId is not null && form.GhlConnection is not null;
+            var hasShopify = form.ShopifyConnectionId is not null && form.ShopifyConnection is not null;
+
+            if (!hasGhl && !hasShopify)
             {
                 leadEvent.Status = LeadEventStatus.Skipped;
-                leadEvent.ErrorMessage = "This Meta lead form is not mapped to a GHL location yet.";
+                leadEvent.ErrorMessage = "This Meta lead form is not mapped to any GHL location or Shopify store yet.";
                 await _db.SaveChangesAsync(ct);
                 return;
             }
@@ -240,19 +254,61 @@ public class LeadProcessingService : ILeadProcessingService
             leadEvent.Status = LeadEventStatus.Fetched;
             await _db.SaveChangesAsync(ct);
 
-            var mappings = await ResolveMappingsAsync(form, ct);
-            var upsertRequest = BuildGhlRequest(form.GhlConnection.LocationId, leadData, mappings, form.FormName);
+            var errors = new List<string>();
 
-            var accessToken = await GetValidGhlAccessTokenAsync(form.GhlConnection, ct);
-            var contact = await _ghl.UpsertContactAsync(accessToken, upsertRequest, ct);
+            if (hasGhl)
+            {
+                try
+                {
+                    var mappings = await ResolveMappingsAsync(form, ct);
+                    var upsertRequest = BuildGhlRequest(form.GhlConnection!.LocationId, leadData, mappings, form.FormName);
 
-            leadEvent.GhlContactId = contact.ContactId;
-            leadEvent.Status = LeadEventStatus.Sent;
+                    var accessToken = await GetValidGhlAccessTokenAsync(form.GhlConnection, ct);
+                    var contact = await _ghl.UpsertContactAsync(accessToken, upsertRequest, ct);
+
+                    leadEvent.GhlContactId = contact.ContactId;
+                    _logger.LogInformation("Lead {LeadgenId} sent to GHL contact {ContactId}.", leadEvent.LeadgenId, contact.ContactId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send lead {LeadgenId} to GHL.", leadEvent.LeadgenId);
+                    errors.Add($"GHL: {ex.Message}");
+                }
+            }
+
+            if (hasShopify)
+            {
+                try
+                {
+                    var shopifyMappings = await ResolveShopifyMappingsAsync(form, ct);
+                    var shopifyRequest = BuildShopifyRequest(leadData, shopifyMappings, form.FormName);
+                    var shopifyToken = _protector.Unprotect(form.ShopifyConnection!.EncryptedAccessToken);
+                    var customer = await _shopify.CreateOrUpdateCustomerAsync(form.ShopifyConnection.ShopDomain, shopifyToken, shopifyRequest, ct);
+
+                    leadEvent.ShopifyCustomerId = customer.Id.ToString();
+                    _logger.LogInformation("Lead {LeadgenId} sent to Shopify customer {CustomerId}.", leadEvent.LeadgenId, customer.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send lead {LeadgenId} to Shopify.", leadEvent.LeadgenId);
+                    errors.Add($"Shopify: {ex.Message}");
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                var anySuccess = leadEvent.GhlContactId != null || leadEvent.ShopifyCustomerId != null;
+                leadEvent.Status = anySuccess ? LeadEventStatus.Sent : LeadEventStatus.Failed;
+                leadEvent.ErrorMessage = string.Join("; ", errors);
+            }
+            else
+            {
+                leadEvent.Status = LeadEventStatus.Sent;
+                leadEvent.ErrorMessage = null;
+            }
+
             leadEvent.ProcessedAtUtc = DateTime.UtcNow;
-            leadEvent.ErrorMessage = null;
             await _db.SaveChangesAsync(ct);
-
-            _logger.LogInformation("Lead {LeadgenId} sent to GHL contact {ContactId}.", leadEvent.LeadgenId, contact.ContactId);
         }
         catch (Exception ex)
         {
@@ -413,5 +469,158 @@ public class LeadProcessingService : ILeadProcessingService
         await _db.SaveChangesAsync(ct);
 
         return refreshed.AccessToken;
+    }
+
+    private async Task<List<ShopifyFieldMapping>> ResolveShopifyMappingsAsync(MetaLeadForm form, CancellationToken ct)
+    {
+        var formSpecific = form.ShopifyFieldMappings.ToList();
+        var tenantDefaults = await _db.ShopifyFieldMappings
+            .Where(m => m.TenantId == GetTenantId(form) && m.MetaLeadFormId == null)
+            .ToListAsync(ct);
+
+        var byKey = tenantDefaults.ToDictionary(m => m.MetaFieldKey, StringComparer.OrdinalIgnoreCase);
+        foreach (var m in formSpecific)
+            byKey[m.MetaFieldKey] = m;
+
+        return byKey.Values.ToList();
+    }
+
+    private static ShopifyCustomerUpsertRequest BuildShopifyRequest(MetaLeadDataDto lead, List<ShopifyFieldMapping> mappings, string? formName = null)
+    {
+        string? firstName = null, lastName = null, email = null, phone = null;
+        string? company = null, address1 = null, city = null, province = null, zip = null, country = null;
+        string? note = null;
+        var tags = new List<string>();
+
+        var customFields = new Dictionary<string, string>();
+
+        if (!string.IsNullOrWhiteSpace(formName))
+        {
+            tags.Add(formName.Trim());
+        }
+
+        foreach (var field in lead.FieldData)
+        {
+            var value = field.Values.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(value)) continue;
+
+            var explicitMapping = mappings.FirstOrDefault(m => string.Equals(m.MetaFieldKey, field.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (explicitMapping is not null)
+            {
+                switch (explicitMapping.TargetType)
+                {
+                    case ShopifyTargetFieldType.StandardCustomerField:
+                        AssignShopifyStandard(explicitMapping.ShopifyFieldKey, value, ref firstName, ref lastName, ref email, ref phone, ref company, ref address1, ref city, ref province, ref zip, ref country);
+                        break;
+                    case ShopifyTargetFieldType.CustomField:
+                        customFields[explicitMapping.ShopifyFieldKey] = value;
+                        var label = explicitMapping.ShopifyFieldKey.Replace("custom.", "").Replace("_", " ");
+                        note = string.IsNullOrWhiteSpace(note) ? $"{label}: {value}" : $"{note}\n{label}: {value}";
+                        break;
+                    case ShopifyTargetFieldType.Tag:
+                        tags.Add(value);
+                        break;
+                    case ShopifyTargetFieldType.Note:
+                        note = string.IsNullOrWhiteSpace(note) ? value : $"{note}\n{value}";
+                        break;
+                }
+                continue;
+            }
+
+            // Defaults:
+            switch (field.Name.ToLowerInvariant())
+            {
+                case "email":
+                    email ??= value;
+                    break;
+                case "first_name":
+                    firstName ??= value;
+                    break;
+                case "last_name":
+                    lastName ??= value;
+                    break;
+                case "full_name":
+                    if (firstName == null && lastName == null)
+                    {
+                        var parts = value.Trim().Split(' ', 2);
+                        firstName = parts[0];
+                        if (parts.Length > 1) lastName = parts[1];
+                    }
+                    break;
+                case "phone_number":
+                case "phone":
+                    phone ??= value;
+                    break;
+                case "city":
+                    city ??= value;
+                    break;
+                case "state":
+                    province ??= value;
+                    break;
+                case "zip_code":
+                case "post_code":
+                    zip ??= value;
+                    break;
+                case "country":
+                    country ??= value;
+                    break;
+                case "company_name":
+                case "company":
+                    company ??= value;
+                    break;
+            }
+        }
+
+        ShopifyAddressDto? address = null;
+        if (address1 != null || city != null || province != null || zip != null || country != null || company != null)
+        {
+            address = new ShopifyAddressDto(address1, city, province, zip, country, company);
+        }
+
+        return new ShopifyCustomerUpsertRequest(
+            Email: email,
+            FirstName: firstName,
+            LastName: lastName,
+            Phone: phone,
+            Tags: tags.Count > 0 ? string.Join(", ", tags.Distinct()) : null,
+            Note: note,
+            Address: address,
+            CustomFields: customFields.Count > 0 ? customFields : null);
+    }
+
+    private static void AssignShopifyStandard(
+        string standardKey,
+        string value,
+        ref string? firstName,
+        ref string? lastName,
+        ref string? email,
+        ref string? phone,
+        ref string? company,
+        ref string? address1,
+        ref string? city,
+        ref string? province,
+        ref string? zip,
+        ref string? country)
+    {
+        var normalized = standardKey.ToLowerInvariant().Replace("customer.", "").Replace("_", "");
+        switch (normalized)
+        {
+            case "firstname": firstName = value; break;
+            case "lastname": lastName = value; break;
+            case "email": email = value; break;
+            case "phone": phone = value; break;
+            case "company": company = value; break;
+            case "address1":
+            case "address":
+            case "street": address1 = value; break;
+            case "city": city = value; break;
+            case "province":
+            case "state": province = value; break;
+            case "zip":
+            case "postalcode":
+            case "zipcode": zip = value; break;
+            case "country": country = value; break;
+        }
     }
 }
