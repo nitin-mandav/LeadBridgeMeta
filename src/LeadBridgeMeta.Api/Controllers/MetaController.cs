@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace LeadBridgeMeta.Api.Controllers;
 
-public record MetaLeadFormResponse(Guid Id, string FormId, string FormName, bool IsActive, Guid? GhlConnectionId);
+public record MetaLeadFormResponse(Guid Id, string FormId, string FormName, bool IsActive, Guid? GhlConnectionId, Guid? ShopifyConnectionId = null);
 public record MetaPageResponse(Guid Id, string PageId, string PageName, bool IsLeadgenWebhookSubscribed, List<MetaLeadFormResponse> Forms);
 public record MetaConnectionResponse(Guid Id, string FacebookUserName, DateTime TokenExpiresAtUtc, List<MetaPageResponse> Pages);
 
@@ -120,7 +120,7 @@ public class MetaController : ControllerBase
             c.Id, c.FacebookUserName, c.TokenExpiresAtUtc,
             c.Pages.Select(p => new MetaPageResponse(
                 p.Id, p.PageId, p.PageName, p.IsLeadgenWebhookSubscribed,
-                p.LeadForms.Select(f => new MetaLeadFormResponse(f.Id, f.FormId, f.FormName, f.IsActive, f.GhlConnectionId)).ToList()
+                p.LeadForms.Select(f => new MetaLeadFormResponse(f.Id, f.FormId, f.FormName, f.IsActive, f.GhlConnectionId, f.ShopifyConnectionId)).ToList()
             )).ToList()
         )).ToList();
 

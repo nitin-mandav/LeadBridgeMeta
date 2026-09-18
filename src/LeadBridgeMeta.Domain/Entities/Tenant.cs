@@ -9,5 +9,7 @@ public class Tenant
 
     public ICollection<MetaConnection> MetaConnections { get; set; } = new List<MetaConnection>();
     public ICollection<GhlConnection> GhlConnections { get; set; } = new List<GhlConnection>();
+    public ICollection<ShopifyConnection> ShopifyConnections { get; set; } = new List<ShopifyConnection>();
     public ICollection<FieldMapping> FieldMappings { get; set; } = new List<FieldMapping>();
+    public ICollection<ShopifyFieldMapping> ShopifyFieldMappings { get; set; } = new List<ShopifyFieldMapping>();
 }

@@ -1,0 +1,11 @@
+version: "2"
+authtoken: 3JRNJk5U279dtpl5DDlKc5vwDyY_6ZBh19rcPW7agyET4AC5W
+tunnels:
+  api:
+    addr: 5265
+    proto: http
+    pooling_enabled: true
+  angular:
+    addr: 4200
+    proto: http
+    pooling_enabled: true

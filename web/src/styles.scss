@@ -182,3 +182,18 @@ th {
   background: #dbeafe;
   color: var(--color-primary);
 }
+.badge-both {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid rgba(126, 34, 206, 0.2);
+}
+.badge-ghl {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.2);
+}
+.badge-shopify {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid rgba(21, 128, 61, 0.2);
+}

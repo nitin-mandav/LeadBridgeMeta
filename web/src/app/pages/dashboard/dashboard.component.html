@@ -2,7 +2,7 @@
   <div class="page-header">
     <div>
       <h1>Leads</h1>
-      <p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL.</p>
+      <p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL or Shopify.</p>
     </div>
   </div>
 
@@ -12,9 +12,17 @@
       <div class="stat-label">Total Leads</div>
       <div class="stat-value">{{ totalCount() }}</div>
     </div>
-    <div class="stat-card stat-sent" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">
+    <div class="stat-card stat-both" [class.active]="statusFilter() === 'both'" (click)="setStatusFilter('both')">
+      <div class="stat-label">Sent to Both</div>
+      <div class="stat-value">{{ sentBothCount() }}</div>
+    </div>
+    <div class="stat-card stat-ghl" [class.active]="statusFilter() === 'ghl'" (click)="setStatusFilter('ghl')">
       <div class="stat-label">Sent to GHL</div>
-      <div class="stat-value">{{ sentCount() }}</div>
+      <div class="stat-value">{{ sentGhlCount() }}</div>
+    </div>
+    <div class="stat-card stat-shopify" [class.active]="statusFilter() === 'shopify'" (click)="setStatusFilter('shopify')">
+      <div class="stat-label">Sent to Shopify</div>
+      <div class="stat-value">{{ sentShopifyCount() }}</div>
     </div>
     <div class="stat-card stat-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
       <div class="stat-label">Skipped (Unmapped)</div>
@@ -51,8 +59,16 @@
           <button type="button" class="pill" [class.active]="statusFilter() === 'all'" (click)="setStatusFilter('all')">
             All ({{ totalCount() }})
           </button>
-          <button type="button" class="pill pill-sent" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">
-            Sent ({{ sentCount() }})
+          @if (sentBothCount() > 0) {
+            <button type="button" class="pill pill-both" [class.active]="statusFilter() === 'both'" (click)="setStatusFilter('both')">
+              Sent to Both ({{ sentBothCount() }})
+            </button>
+          }
+          <button type="button" class="pill pill-ghl" [class.active]="statusFilter() === 'ghl'" (click)="setStatusFilter('ghl')">
+            Sent to GHL ({{ sentGhlCount() }})
+          </button>
+          <button type="button" class="pill pill-shopify" [class.active]="statusFilter() === 'shopify'" (click)="setStatusFilter('shopify')">
+            Sent to Shopify ({{ sentShopifyCount() }})
           </button>
           <button type="button" class="pill pill-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
             Skipped ({{ skippedCount() }})
@@ -114,11 +130,11 @@
                   </span>
                 </span>
               </th>
-              <th class="sortable" (click)="toggleSort('ghlContactId')" title="Sort by GHL contact">
+              <th class="sortable" (click)="toggleSort('destinations')" title="Sort by destination">
                 <span class="th-content">
-                  GHL Contact
-                  <span class="sort-indicator" [class.active]="sortColumn() === 'ghlContactId'">
-                    {{ sortColumn() === 'ghlContactId' ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
+                  Destinations / IDs
+                  <span class="sort-indicator" [class.active]="sortColumn() === 'destinations' || sortColumn() === 'ghlContactId'">
+                    {{ (sortColumn() === 'destinations' || sortColumn() === 'ghlContactId') ? (sortDirection() === 'asc' ? '▲' : '▼') : '↕' }}
                   </span>
                 </span>
               </th>
@@ -141,14 +157,26 @@
                   <strong>{{ lead.formName }}</strong>
                 </td>
                 <td>
-                  <span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span>
+                  <span [class]="getLeadStatus(lead).cssClass">{{ getLeadStatus(lead).label }}</span>
                 </td>
                 <td class="contact-cell">
-                  @if (lead.ghlContactId) {
-                    <code>{{ lead.ghlContactId }}</code>
-                  } @else {
-                    <span class="muted">—</span>
-                  }
+                  <div class="destinations-cell">
+                    @if (lead.ghlContactId) {
+                      <div class="dest-chip dest-ghl" title="GHL Contact ID">
+                        <span class="dest-tag">GHL</span>
+                        <code>{{ lead.ghlContactId }}</code>
+                      </div>
+                    }
+                    @if (lead.shopifyCustomerId) {
+                      <div class="dest-chip dest-shopify" title="Shopify Customer ID">
+                        <span class="dest-tag">Shopify</span>
+                        <code>{{ lead.shopifyCustomerId }}</code>
+                      </div>
+                    }
+                    @if (!lead.ghlContactId && !lead.shopifyCustomerId) {
+                      <span class="muted">—</span>
+                    }
+                  </div>
                 </td>
                 <td class="error-cell" [title]="lead.errorMessage || ''">
                   {{ lead.errorMessage || '—' }}
@@ -262,7 +290,7 @@
             <div class="contact-main-info">
               <div class="contact-name-row">
                 <h4>{{ selectedContact().name }}</h4>
-                <span [class]="badgeClass(lead.status)">{{ statusLabels[lead.status] }}</span>
+                <span [class]="getLeadStatus(lead).cssClass">{{ getLeadStatus(lead).label }}</span>
               </div>
               <div class="contact-quick-links">
                 @if (selectedContact().email) {
@@ -300,6 +328,20 @@
                     </button>
                   } @else {
                     <span class="muted">Not created in GHL</span>
+                  }
+                </div>
+              </div>
+
+              <div class="meta-item">
+                <span class="meta-label">Shopify Customer ID</span>
+                <div class="meta-value-copy">
+                  @if (lead.shopifyCustomerId) {
+                    <code>{{ lead.shopifyCustomerId }}</code>
+                    <button type="button" class="btn-copy" (click)="copyText(lead.shopifyCustomerId, 'shopify')" title="Copy Shopify ID">
+                      {{ copiedKey() === 'shopify' ? '✓ Copied' : 'Copy' }}
+                    </button>
+                  } @else {
+                    <span class="muted">Not created in Shopify</span>
                   }
                 </div>
               </div>

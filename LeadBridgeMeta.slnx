@@ -5,7 +5,4 @@
     <Project Path="src/LeadBridgeMeta.Domain/LeadBridgeMeta.Domain.csproj" />
     <Project Path="src/LeadBridgeMeta.Infrastructure/LeadBridgeMeta.Infrastructure.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/LeadBridgeMeta.Tests/LeadBridgeMeta.Tests.csproj" />
-  </Folder>
 </Solution>

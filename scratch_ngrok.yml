@@ -1,0 +1,10 @@
+version: "2"
+tunnels:
+  api:
+    addr: 5265
+    proto: http
+    pooling_enabled: true
+  angular:
+    addr: 4200
+    proto: http
+    pooling_enabled: true

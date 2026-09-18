@@ -12,7 +12,9 @@ public interface IAppDbContext
     DbSet<MetaPage> MetaPages { get; }
     DbSet<MetaLeadForm> MetaLeadForms { get; }
     DbSet<GhlConnection> GhlConnections { get; }
+    DbSet<ShopifyConnection> ShopifyConnections { get; }
     DbSet<FieldMapping> FieldMappings { get; }
+    DbSet<ShopifyFieldMapping> ShopifyFieldMappings { get; }
     DbSet<LeadEvent> LeadEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);

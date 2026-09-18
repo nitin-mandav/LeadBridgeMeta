@@ -25,7 +25,7 @@ export class DashboardComponent implements OnInit {
 
   // Search & Filter
   readonly searchQuery = signal<string>('');
-  readonly statusFilter = signal<number | 'all'>('all');
+  readonly statusFilter = signal<string | number>('all');
 
   // Sorting
   readonly sortColumn = signal<string>('receivedAtUtc');
@@ -49,6 +49,9 @@ export class DashboardComponent implements OnInit {
   // Counts
   readonly totalCount = computed(() => this.leads().length);
   readonly sentCount = computed(() => this.leads().filter((l) => l.status === 2).length);
+  readonly sentBothCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.ghlContactId && !!l.shopifyCustomerId).length);
+  readonly sentGhlCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.ghlContactId).length);
+  readonly sentShopifyCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.shopifyCustomerId).length);
   readonly skippedCount = computed(() => this.leads().filter((l) => l.status === 4).length);
   readonly failedCount = computed(() => this.leads().filter((l) => l.status === 3).length);
 
@@ -58,24 +61,41 @@ export class DashboardComponent implements OnInit {
     const status = this.statusFilter();
 
     if (status !== 'all') {
-      list = list.filter((l) => l.status === status);
+      if (status === 'both') {
+        list = list.filter((l) => l.status === 2 && !!l.ghlContactId && !!l.shopifyCustomerId);
+      } else if (status === 'ghl') {
+        list = list.filter((l) => l.status === 2 && !!l.ghlContactId);
+      } else if (status === 'shopify') {
+        list = list.filter((l) => l.status === 2 && !!l.shopifyCustomerId);
+      } else if (status === 'sent') {
+        list = list.filter((l) => l.status === 2);
+      } else {
+        list = list.filter((l) => l.status === Number(status));
+      }
     }
 
     if (query) {
       list = list.filter((l) => {
         const form = (l.formName || '').toLowerCase();
         const contact = (l.ghlContactId || '').toLowerCase();
+        const shopifyId = (l.shopifyCustomerId || '').toLowerCase();
         const leadgen = (l.leadgenId || '').toLowerCase();
         const error = (l.errorMessage || '').toLowerCase();
-        const statusText = (this.statusLabels[l.status] || '').toLowerCase();
+        const statusObj = this.getLeadStatus(l);
+        const statusText = statusObj.label.toLowerCase();
         const date = new Date(l.receivedAtUtc).toLocaleString().toLowerCase();
+        const hasGhl = !!(l.ghlContactId || (l as any).GhlContactId);
+        const hasShopify = !!(l.shopifyCustomerId || (l as any).ShopifyCustomerId);
 
         return (
           form.includes(query) ||
           contact.includes(query) ||
+          shopifyId.includes(query) ||
           leadgen.includes(query) ||
           error.includes(query) ||
           statusText.includes(query) ||
+          (query === 'ghl' && hasGhl) ||
+          ((query === 'shopify' || query.includes('spotify')) && hasShopify) ||
           date.includes(query)
         );
       });
@@ -98,12 +118,13 @@ export class DashboardComponent implements OnInit {
           valB = (b.formName || '').toLowerCase();
           break;
         case 'status':
-          valA = a.status;
-          valB = b.status;
+          valA = this.getLeadStatus(a).label;
+          valB = this.getLeadStatus(b).label;
           break;
+        case 'destinations':
         case 'ghlContactId':
-          valA = (a.ghlContactId || '').toLowerCase();
-          valB = (b.ghlContactId || '').toLowerCase();
+          valA = (a.ghlContactId || a.shopifyCustomerId || '').toLowerCase();
+          valB = (b.ghlContactId || b.shopifyCustomerId || '').toLowerCase();
           break;
         case 'errorMessage':
           valA = (a.errorMessage || '').toLowerCase();
@@ -172,7 +193,12 @@ export class DashboardComponent implements OnInit {
     this.isLoading.set(true);
     this.leadsService.getLeads().subscribe({
       next: (leads) => {
-        this.leads.set(leads);
+        const normalized = (leads || []).map((l: any) => ({
+          ...l,
+          shopifyCustomerId: l.shopifyCustomerId ?? l.ShopifyCustomerId ?? null,
+          ghlContactId: l.ghlContactId ?? l.GhlContactId ?? null,
+        }));
+        this.leads.set(normalized);
         this.isLoading.set(false);
       },
       error: () => this.isLoading.set(false),
@@ -198,7 +224,7 @@ export class DashboardComponent implements OnInit {
     this.currentPage.set(1);
   }
 
-  setStatusFilter(status: number | 'all'): void {
+  setStatusFilter(status: string | number): void {
     this.statusFilter.set(status);
     this.currentPage.set(1);
   }
@@ -238,8 +264,34 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  badgeClass(status: number): string {
-    return `badge badge-${this.statusLabels[status as 0 | 1 | 2 | 3 | 4].toLowerCase()}`;
+  getLeadStatus(lead: LeadEvent): { label: string; cssClass: string; key: string } {
+    if (lead.status === 3) return { label: 'Failed', cssClass: 'badge badge-failed', key: 'failed' };
+    if (lead.status === 4) return { label: 'Skipped (Unmapped)', cssClass: 'badge badge-skipped', key: 'skipped' };
+    if (lead.status === 0) return { label: 'Received', cssClass: 'badge badge-received', key: 'received' };
+    if (lead.status === 1) return { label: 'Fetched', cssClass: 'badge badge-fetched', key: 'fetched' };
+
+    // Status === 2 (Sent)
+    const hasGhl = !!lead.ghlContactId;
+    const hasShopify = !!lead.shopifyCustomerId;
+
+    if (hasGhl && hasShopify) {
+      return { label: 'Sent to Both', cssClass: 'badge badge-both', key: 'both' };
+    }
+    if (hasGhl) {
+      return { label: 'Sent to GHL', cssClass: 'badge badge-ghl', key: 'ghl' };
+    }
+    if (hasShopify) {
+      return { label: 'Sent to Shopify', cssClass: 'badge badge-shopify', key: 'shopify' };
+    }
+    return { label: 'Sent', cssClass: 'badge badge-sent', key: 'sent' };
+  }
+
+  badgeClass(status: number, lead?: LeadEvent): string {
+    if (lead) {
+      return this.getLeadStatus(lead).cssClass;
+    }
+    const label = this.statusLabels[status as 0 | 1 | 2 | 3 | 4];
+    return `badge badge-${(label || 'received').toLowerCase()}`;
   }
 
   readonly isFetchingDetails = signal<boolean>(false);
@@ -276,11 +328,16 @@ export class DashboardComponent implements OnInit {
       next: (fullLead) => {
         this.isFetchingDetails.set(false);
         if (fullLead) {
+          const norm = {
+            ...fullLead,
+            shopifyCustomerId: (fullLead as any).shopifyCustomerId ?? (fullLead as any).ShopifyCustomerId ?? null,
+            ghlContactId: (fullLead as any).ghlContactId ?? (fullLead as any).GhlContactId ?? null,
+          };
           this.leads.update((list) =>
-            list.map((l) => (l.id === fullLead.id ? { ...l, ...fullLead } : l))
+            list.map((l) => (l.id === norm.id ? { ...l, ...norm } : l))
           );
-          if (this.selectedLead()?.id === fullLead.id) {
-            this.selectedLead.set({ ...this.selectedLead()!, ...fullLead });
+          if (this.selectedLead()?.id === norm.id) {
+            this.selectedLead.set({ ...this.selectedLead()!, ...norm });
           }
         }
       },
