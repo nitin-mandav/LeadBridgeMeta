@@ -1,11 +1,13 @@
 using LeadBridgeMeta.Application.Auth;
 using LeadBridgeMeta.Application.Common;
+using LeadBridgeMeta.Application.Email;
 using LeadBridgeMeta.Application.Ghl;
 using LeadBridgeMeta.Application.Leads;
 using LeadBridgeMeta.Application.Mappings;
 using LeadBridgeMeta.Application.Meta;
 using LeadBridgeMeta.Application.Shopify;
 using LeadBridgeMeta.Infrastructure.Auth;
+using LeadBridgeMeta.Infrastructure.Email;
 using LeadBridgeMeta.Infrastructure.Ghl;
 using LeadBridgeMeta.Infrastructure.Identity;
 using LeadBridgeMeta.Infrastructure.Leads;
@@ -26,7 +28,10 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("Default")));
+        {
+            options.UseSqlServer(configuration.GetConnectionString("Default"));
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
         services.AddIdentityCore<ApplicationUser>(options =>
@@ -44,6 +49,7 @@ public static class DependencyInjection
         services.Configure<MetaOptions>(configuration.GetSection(MetaOptions.SectionName));
         services.Configure<GhlOptions>(configuration.GetSection(GhlOptions.SectionName));
         services.Configure<ShopifyOptions>(configuration.GetSection(ShopifyOptions.SectionName));
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         services.AddHttpClient<IMetaGraphClient, MetaGraphClient>();
@@ -57,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<ILeadProcessingService, LeadProcessingService>();
         services.AddScoped<IGhlConnectionService, GhlConnectionService>();
         services.AddScoped<IShopifyConnectionService, ShopifyConnectionService>();
+        services.AddScoped<IEmailConnectionService, EmailConnectionService>();
         services.AddScoped<IMappingService, MappingService>();
         services.AddScoped<IShopifyMappingService, ShopifyMappingService>();
         services.AddScoped<IMetaWebhookService, MetaWebhookService>();

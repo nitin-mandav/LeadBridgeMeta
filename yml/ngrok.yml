@@ -4,8 +4,4 @@ tunnels:
   api:
     addr: 5265
     proto: http
-    pooling_enabled: true
-  angular:
-    addr: 4200
-    proto: http
-    pooling_enabled: true
+    domain: wish-clarity-afford.ngrok-free.dev

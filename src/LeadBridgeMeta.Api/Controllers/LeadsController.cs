@@ -9,7 +9,9 @@ namespace LeadBridgeMeta.Api.Controllers;
 public record LeadEventResponse(
     Guid Id, string LeadgenId, string FormName, LeadEventStatus Status,
     string? GhlContactId, string? ShopifyCustomerId, string? ErrorMessage, int RetryCount, DateTime ReceivedAtUtc, DateTime? ProcessedAtUtc,
-    string? RawLeadDataJson = null);
+    string? RawLeadDataJson = null,
+    string? EmailDeliveryStatus = null,
+    string? EmailSentTo = null);
 
 [ApiController]
 [Route("api/leads")]
@@ -57,5 +59,7 @@ public class LeadsController : ControllerBase
     private static LeadEventResponse MapToResponse(LeadEventDto dto) =>
         new(dto.Id, dto.LeadgenId, dto.FormName, dto.Status,
             dto.GhlContactId, dto.ShopifyCustomerId, dto.ErrorMessage, dto.RetryCount, dto.ReceivedAtUtc, dto.ProcessedAtUtc,
-            dto.RawLeadDataJson);
+            dto.RawLeadDataJson,
+            dto.EmailDeliveryStatus,
+            dto.EmailSentTo);
 }

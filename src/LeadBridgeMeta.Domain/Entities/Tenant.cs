@@ -12,4 +12,5 @@ public class Tenant
     public ICollection<ShopifyConnection> ShopifyConnections { get; set; } = new List<ShopifyConnection>();
     public ICollection<FieldMapping> FieldMappings { get; set; } = new List<FieldMapping>();
     public ICollection<ShopifyFieldMapping> ShopifyFieldMappings { get; set; } = new List<ShopifyFieldMapping>();
+    public ICollection<EmailConnection> EmailConnections { get; set; } = new List<EmailConnection>();
 }

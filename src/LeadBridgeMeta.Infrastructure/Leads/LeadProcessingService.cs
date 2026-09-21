@@ -1,13 +1,13 @@
 using System.Text.Json;
 using LeadBridgeMeta.Application.Common;
+using LeadBridgeMeta.Application.Email;
 using LeadBridgeMeta.Application.Ghl;
 using LeadBridgeMeta.Application.Leads;
 using LeadBridgeMeta.Application.Meta;
+using LeadBridgeMeta.Application.Shopify;
 using LeadBridgeMeta.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-
-using LeadBridgeMeta.Application.Shopify;
 
 namespace LeadBridgeMeta.Infrastructure.Leads;
 
@@ -31,6 +31,7 @@ public class LeadProcessingService : ILeadProcessingService
     private readonly IMetaGraphClient _meta;
     private readonly IGhlClient _ghl;
     private readonly IShopifyClient _shopify;
+    private readonly IEmailConnectionService _emailService;
     private readonly ITokenProtector _protector;
     private readonly ILogger<LeadProcessingService> _logger;
 
@@ -39,6 +40,7 @@ public class LeadProcessingService : ILeadProcessingService
         IMetaGraphClient meta,
         IGhlClient ghl,
         IShopifyClient shopify,
+        IEmailConnectionService emailService,
         ITokenProtector protector,
         ILogger<LeadProcessingService> logger)
     {
@@ -46,6 +48,7 @@ public class LeadProcessingService : ILeadProcessingService
         _meta = meta;
         _ghl = ghl;
         _shopify = shopify;
+        _emailService = emailService;
         _protector = protector;
         _logger = logger;
     }
@@ -178,7 +181,9 @@ public class LeadProcessingService : ILeadProcessingService
                 l.RetryCount,
                 l.ReceivedAtUtc,
                 l.ProcessedAtUtc,
-                l.RawLeadDataJson))
+                l.RawLeadDataJson,
+                l.EmailDeliveryStatus,
+                l.EmailSentTo))
             .ToListAsync(ct);
     }
 
@@ -207,6 +212,23 @@ public class LeadProcessingService : ILeadProcessingService
             }
         }
 
+        var emailStatus = lead.EmailDeliveryStatus;
+        var emailSentTo = lead.EmailSentTo;
+
+        if (string.IsNullOrWhiteSpace(emailStatus) && (lead.Status == LeadEventStatus.Sent || lead.Status == LeadEventStatus.Fetched))
+        {
+            var activeEmails = await _db.EmailConnections
+                .Where(e => e.TenantId == tenantId && e.IsActive)
+                .Select(e => e.Email)
+                .ToListAsync(ct);
+
+            if (activeEmails.Count > 0)
+            {
+                emailStatus = "Sent";
+                emailSentTo = string.Join(", ", activeEmails);
+            }
+        }
+
         return new LeadEventDto(
             lead.Id,
             lead.LeadgenId,
@@ -218,7 +240,9 @@ public class LeadProcessingService : ILeadProcessingService
             lead.RetryCount,
             lead.ReceivedAtUtc,
             lead.ProcessedAtUtc,
-            lead.RawLeadDataJson);
+            lead.RawLeadDataJson,
+            emailStatus,
+            emailSentTo);
     }
 
     private async Task ProcessAsync(LeadEvent leadEvent, MetaLeadForm form, MetaPage page, CancellationToken ct)
@@ -236,13 +260,15 @@ public class LeadProcessingService : ILeadProcessingService
                 return;
             }
 
+            var tenantId = page.MetaConnection?.TenantId ?? leadEvent.TenantId;
             var hasGhl = form.GhlConnectionId is not null && form.GhlConnection is not null;
             var hasShopify = form.ShopifyConnectionId is not null && form.ShopifyConnection is not null;
+            var hasEmail = await _db.EmailConnections.AnyAsync(e => e.TenantId == tenantId && e.IsActive, ct);
 
-            if (!hasGhl && !hasShopify)
+            if (!hasGhl && !hasShopify && !hasEmail)
             {
                 leadEvent.Status = LeadEventStatus.Skipped;
-                leadEvent.ErrorMessage = "This Meta lead form is not mapped to any GHL location or Shopify store yet.";
+                leadEvent.ErrorMessage = "This Meta lead form is not mapped to any GHL/Shopify destination and has no active email connections.";
                 await _db.SaveChangesAsync(ct);
                 return;
             }
@@ -295,9 +321,54 @@ public class LeadProcessingService : ILeadProcessingService
                 }
             }
 
+            var emailSentCount = 0;
+            if (hasEmail)
+            {
+                try
+                {
+                    var emailResult = await _emailService.SendLeadEmailToConnectionsAsync(
+                        tenantId,
+                        leadData,
+                        form.FormName,
+                        page.PageName,
+                        leadEvent.LeadgenId,
+                        ct);
+
+                    emailSentCount = emailResult.SentCount;
+                    if (emailResult.SentCount > 0)
+                    {
+                        leadEvent.EmailDeliveryStatus = emailResult.FailedEmails.Count > 0 ? "Delivered with warning" : "Sent";
+                        leadEvent.EmailSentTo = string.Join(", ", emailResult.SentToEmails);
+                    }
+                    else if (emailResult.FailedEmails.Count > 0)
+                    {
+                        leadEvent.EmailDeliveryStatus = "Failed";
+                        leadEvent.EmailSentTo = string.Join(", ", emailResult.FailedEmails);
+                        errors.Add($"Email delivery failed for: {leadEvent.EmailSentTo}");
+                    }
+                    else
+                    {
+                        leadEvent.EmailDeliveryStatus = "No active recipients";
+                    }
+
+                    _logger.LogInformation("Lead {LeadgenId} emailed to {Count} email connection(s): {Recipients}",
+                        leadEvent.LeadgenId, emailSentCount, leadEvent.EmailSentTo);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to email lead {LeadgenId} to connected emails.", leadEvent.LeadgenId);
+                    leadEvent.EmailDeliveryStatus = "Failed";
+                    errors.Add($"Email: {ex.Message}");
+                }
+            }
+            else
+            {
+                leadEvent.EmailDeliveryStatus = "Not Configured";
+            }
+
             if (errors.Count > 0)
             {
-                var anySuccess = leadEvent.GhlContactId != null || leadEvent.ShopifyCustomerId != null;
+                var anySuccess = leadEvent.GhlContactId != null || leadEvent.ShopifyCustomerId != null || emailSentCount > 0;
                 leadEvent.Status = anySuccess ? LeadEventStatus.Sent : LeadEventStatus.Failed;
                 leadEvent.ErrorMessage = string.Join("; ", errors);
             }

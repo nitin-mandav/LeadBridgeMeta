@@ -49,9 +49,29 @@ export class DashboardComponent implements OnInit {
   // Counts
   readonly totalCount = computed(() => this.leads().length);
   readonly sentCount = computed(() => this.leads().filter((l) => l.status === 2).length);
-  readonly sentBothCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.ghlContactId && !!l.shopifyCustomerId).length);
+  readonly sentAllCount = computed(
+    () =>
+      this.leads().filter(
+        (l) =>
+          l.status === 2 &&
+          !!l.ghlContactId &&
+          !!l.shopifyCustomerId &&
+          (!!l.emailSentTo || l.emailDeliveryStatus === 'Sent' || l.emailDeliveryStatus === 'Delivered with warning')
+      ).length
+  );
+  readonly sentBothCount = computed(
+    () => this.leads().filter((l) => l.status === 2 && !!l.ghlContactId && !!l.shopifyCustomerId).length
+  );
   readonly sentGhlCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.ghlContactId).length);
   readonly sentShopifyCount = computed(() => this.leads().filter((l) => l.status === 2 && !!l.shopifyCustomerId).length);
+  readonly sentEmailCount = computed(
+    () =>
+      this.leads().filter(
+        (l) =>
+          l.status === 2 &&
+          (!!l.emailSentTo || l.emailDeliveryStatus === 'Sent' || l.emailDeliveryStatus === 'Delivered with warning')
+      ).length
+  );
   readonly skippedCount = computed(() => this.leads().filter((l) => l.status === 4).length);
   readonly failedCount = computed(() => this.leads().filter((l) => l.status === 3).length);
 
@@ -61,12 +81,24 @@ export class DashboardComponent implements OnInit {
     const status = this.statusFilter();
 
     if (status !== 'all') {
-      if (status === 'both') {
-        list = list.filter((l) => l.status === 2 && !!l.ghlContactId && !!l.shopifyCustomerId);
+      if (status === 'all_destinations' || status === 'both') {
+        list = list.filter(
+          (l) =>
+            l.status === 2 &&
+            !!l.ghlContactId &&
+            !!l.shopifyCustomerId &&
+            (!!l.emailSentTo || l.emailDeliveryStatus === 'Sent' || l.emailDeliveryStatus === 'Delivered with warning')
+        );
       } else if (status === 'ghl') {
         list = list.filter((l) => l.status === 2 && !!l.ghlContactId);
       } else if (status === 'shopify') {
         list = list.filter((l) => l.status === 2 && !!l.shopifyCustomerId);
+      } else if (status === 'email') {
+        list = list.filter(
+          (l) =>
+            l.status === 2 &&
+            (!!l.emailSentTo || l.emailDeliveryStatus === 'Sent' || l.emailDeliveryStatus === 'Delivered with warning')
+        );
       } else if (status === 'sent') {
         list = list.filter((l) => l.status === 2);
       } else {
@@ -79,6 +111,8 @@ export class DashboardComponent implements OnInit {
         const form = (l.formName || '').toLowerCase();
         const contact = (l.ghlContactId || '').toLowerCase();
         const shopifyId = (l.shopifyCustomerId || '').toLowerCase();
+        const emailSentTo = (l.emailSentTo || '').toLowerCase();
+        const emailStatus = (l.emailDeliveryStatus || '').toLowerCase();
         const leadgen = (l.leadgenId || '').toLowerCase();
         const error = (l.errorMessage || '').toLowerCase();
         const statusObj = this.getLeadStatus(l);
@@ -86,16 +120,20 @@ export class DashboardComponent implements OnInit {
         const date = new Date(l.receivedAtUtc).toLocaleString().toLowerCase();
         const hasGhl = !!(l.ghlContactId || (l as any).GhlContactId);
         const hasShopify = !!(l.shopifyCustomerId || (l as any).ShopifyCustomerId);
+        const hasEmail = !!(l.emailSentTo || l.emailDeliveryStatus);
 
         return (
           form.includes(query) ||
           contact.includes(query) ||
           shopifyId.includes(query) ||
+          emailSentTo.includes(query) ||
+          emailStatus.includes(query) ||
           leadgen.includes(query) ||
           error.includes(query) ||
           statusText.includes(query) ||
           (query === 'ghl' && hasGhl) ||
           ((query === 'shopify' || query.includes('spotify')) && hasShopify) ||
+          (query === 'email' && hasEmail) ||
           date.includes(query)
         );
       });
@@ -123,8 +161,8 @@ export class DashboardComponent implements OnInit {
           break;
         case 'destinations':
         case 'ghlContactId':
-          valA = (a.ghlContactId || a.shopifyCustomerId || '').toLowerCase();
-          valB = (b.ghlContactId || b.shopifyCustomerId || '').toLowerCase();
+          valA = (a.ghlContactId || a.shopifyCustomerId || a.emailSentTo || '').toLowerCase();
+          valB = (b.ghlContactId || b.shopifyCustomerId || b.emailSentTo || '').toLowerCase();
           break;
         case 'errorMessage':
           valA = (a.errorMessage || '').toLowerCase();
@@ -197,6 +235,8 @@ export class DashboardComponent implements OnInit {
           ...l,
           shopifyCustomerId: l.shopifyCustomerId ?? l.ShopifyCustomerId ?? null,
           ghlContactId: l.ghlContactId ?? l.GhlContactId ?? null,
+          emailDeliveryStatus: l.emailDeliveryStatus ?? l.EmailDeliveryStatus ?? null,
+          emailSentTo: l.emailSentTo ?? l.EmailSentTo ?? null,
         }));
         this.leads.set(normalized);
         this.isLoading.set(false);
@@ -273,9 +313,21 @@ export class DashboardComponent implements OnInit {
     // Status === 2 (Sent)
     const hasGhl = !!lead.ghlContactId;
     const hasShopify = !!lead.shopifyCustomerId;
+    const hasEmail = !!lead.emailSentTo || lead.emailDeliveryStatus === 'Sent' || lead.emailDeliveryStatus === 'Delivered with warning';
 
+    const count = (hasGhl ? 1 : 0) + (hasShopify ? 1 : 0) + (hasEmail ? 1 : 0);
+
+    if (count >= 3) {
+      return { label: 'Sent to All', cssClass: 'badge badge-both', key: 'all' };
+    }
     if (hasGhl && hasShopify) {
       return { label: 'Sent to Both', cssClass: 'badge badge-both', key: 'both' };
+    }
+    if (hasGhl && hasEmail) {
+      return { label: 'Sent to GHL & Email', cssClass: 'badge badge-both', key: 'ghl-email' };
+    }
+    if (hasShopify && hasEmail) {
+      return { label: 'Sent to Shopify & Email', cssClass: 'badge badge-both', key: 'shopify-email' };
     }
     if (hasGhl) {
       return { label: 'Sent to GHL', cssClass: 'badge badge-ghl', key: 'ghl' };
@@ -283,7 +335,30 @@ export class DashboardComponent implements OnInit {
     if (hasShopify) {
       return { label: 'Sent to Shopify', cssClass: 'badge badge-shopify', key: 'shopify' };
     }
+    if (hasEmail) {
+      return { label: 'Sent to Email', cssClass: 'badge badge-email', key: 'email' };
+    }
     return { label: 'Sent', cssClass: 'badge badge-sent', key: 'sent' };
+  }
+
+  getEmailStatusBadgeClass(status?: string | null): string {
+    if (!status) return 'badge badge-skipped';
+    const lower = status.toLowerCase();
+    if (lower.includes('sent') || lower.includes('delivered') || lower.includes('success')) {
+      return 'badge badge-sent';
+    }
+    if (lower.includes('fail') || lower.includes('error')) {
+      return 'badge badge-failed';
+    }
+    if (lower.includes('warn')) {
+      return 'badge badge-warning';
+    }
+    return 'badge badge-skipped';
+  }
+
+  getEmailList(emailSentTo?: string | null): string[] {
+    if (!emailSentTo) return [];
+    return emailSentTo.split(',').map((e) => e.trim()).filter(Boolean);
   }
 
   badgeClass(status: number, lead?: LeadEvent): string {
@@ -332,6 +407,8 @@ export class DashboardComponent implements OnInit {
             ...fullLead,
             shopifyCustomerId: (fullLead as any).shopifyCustomerId ?? (fullLead as any).ShopifyCustomerId ?? null,
             ghlContactId: (fullLead as any).ghlContactId ?? (fullLead as any).GhlContactId ?? null,
+            emailDeliveryStatus: (fullLead as any).emailDeliveryStatus ?? (fullLead as any).EmailDeliveryStatus ?? null,
+            emailSentTo: (fullLead as any).emailSentTo ?? (fullLead as any).EmailSentTo ?? null,
           };
           this.leads.update((list) =>
             list.map((l) => (l.id === norm.id ? { ...l, ...norm } : l))

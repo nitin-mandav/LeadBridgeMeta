@@ -57,7 +57,8 @@
       color: var(--color-success);
     }
 
-    &.stat-both .stat-value {
+    &.stat-both .stat-value,
+    &.stat-all .stat-value {
       color: #7e22ce;
     }
 
@@ -67,6 +68,10 @@
 
     &.stat-shopify .stat-value {
       color: #15803d;
+    }
+
+    &.stat-email .stat-value {
+      color: #6d28d9;
     }
 
     &.stat-skipped .stat-value {
@@ -183,7 +188,8 @@
           border-color: #16a34a;
         }
 
-        &.pill-both.active {
+        &.pill-both.active,
+        &.pill-all.active {
           background: #7e22ce;
           border-color: #7e22ce;
         }
@@ -196,6 +202,11 @@
         &.pill-shopify.active {
           background: #15803d;
           border-color: #15803d;
+        }
+
+        &.pill-email.active {
+          background: #6d28d9;
+          border-color: #6d28d9;
         }
 
         &.pill-skipped.active {
@@ -343,6 +354,11 @@
         &.dest-shopify .dest-tag {
           background: #dcfce7;
           color: #15803d;
+        }
+
+        &.dest-email .dest-tag {
+          background: #ede9fe;
+          color: #6d28d9;
         }
       }
     }
@@ -750,6 +766,17 @@
     flex-direction: column;
     gap: 0.25rem;
 
+    .meta-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+
+      .meta-label {
+        margin: 0;
+      }
+    }
+
     .meta-label {
       font-size: 0.72rem;
       font-weight: 600;
@@ -781,6 +808,29 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         border: 1px solid var(--color-border);
+      }
+    }
+
+    .email-recipients-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      width: 100%;
+
+      .email-recipient-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.4rem;
+        width: 100%;
+
+        code {
+          flex: 1;
+          min-width: 0;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          white-space: nowrap;
+        }
       }
     }
   }
