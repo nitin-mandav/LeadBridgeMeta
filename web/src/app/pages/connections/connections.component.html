@@ -180,3 +180,65 @@
     </table>
   }
 </div>
+
+<div class="card section">
+  <div class="section-header">
+    <div class="header-title-group">
+      <h2>Email Notifications</h2>
+      @if (emailConnections().length > 0) {
+        <span class="badge badge-sent">Connected ({{ emailConnections().length }})</span>
+      }
+    </div>
+  </div>
+
+  <p class="muted" style="margin-bottom: 1rem;">
+    Add email addresses to automatically receive incoming Meta leads with all form questions and submitted responses.
+  </p>
+
+  <div style="display: flex; gap: 0.75rem; align-items: center; max-width: 550px; margin-bottom: 1.25rem;">
+    <input
+      type="email"
+      [ngModel]="newEmailInput()"
+      (ngModelChange)="newEmailInput.set($event)"
+      placeholder="office@mandavconsultancy.com"
+      style="flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius); font-size: 0.9rem;"
+      (keydown.enter)="connectEmail()"
+    />
+    <button class="btn btn-primary" [disabled]="isConnectingEmail() || !newEmailInput().trim()" (click)="connectEmail()">
+      {{ isConnectingEmail() ? 'Connecting…' : 'Add Email Connection' }}
+    </button>
+  </div>
+
+  @if (emailConnections().length === 0) {
+    <p class="empty-state">No email addresses connected yet. Enter an email address above and click Add Email Connection to receive leads automatically.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Recipient Email</th>
+          <th>Status</th>
+          <th>Connected At</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (c of emailConnections(); track c.id) {
+          <tr>
+            <td><strong>{{ c.email }}</strong></td>
+            <td><span class="badge badge-sent">Active</span></td>
+            <td>{{ c.createdAtUtc | date: 'medium' }}</td>
+            <td style="text-align: right; display: flex; justify-content: flex-end; gap: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" [disabled]="testingEmailId() === c.id" (click)="sendTestEmail(c.email, c.id)" title="Send a sample test lead email">
+                {{ testingEmailId() === c.id ? 'Sending…' : 'Send Test Lead' }}
+              </button>
+              <button class="btn btn-outline-danger btn-sm" [disabled]="disconnectingEmailId() === c.id" (click)="disconnectEmail(c.id, c.email)">
+                {{ disconnectingEmailId() === c.id ? 'Disconnecting…' : 'Disconnect' }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>
+

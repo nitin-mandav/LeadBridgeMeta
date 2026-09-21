@@ -15,6 +15,8 @@ export interface LeadEvent {
   status: LeadEventStatus;
   ghlContactId: string | null;
   shopifyCustomerId: string | null;
+  emailDeliveryStatus?: string | null;
+  emailSentTo?: string | null;
   errorMessage: string | null;
   retryCount: number;
   receivedAtUtc: string;

@@ -5,9 +5,11 @@ import { ActivatedRoute } from '@angular/router';
 import { MetaService } from '../../core/services/meta.service';
 import { GhlService } from '../../core/services/ghl.service';
 import { ShopifyService } from '../../core/services/shopify.service';
+import { EmailService } from '../../core/services/email.service';
 import { MetaConnection } from '../../core/models/meta.models';
 import { GhlConnection } from '../../core/models/ghl.models';
 import { ShopifyConnection } from '../../core/models/shopify.models';
+import { EmailConnection } from '../../core/models/email.models';
 
 @Component({
   selector: 'app-connections',
@@ -20,6 +22,7 @@ export class ConnectionsComponent implements OnInit {
   readonly metaConnections = signal<MetaConnection[]>([]);
   readonly ghlConnections = signal<GhlConnection[]>([]);
   readonly shopifyConnections = signal<ShopifyConnection[]>([]);
+  readonly emailConnections = signal<EmailConnection[]>([]);
   readonly isLoading = signal(true);
   readonly subscribingPageId = signal<string | null>(null);
   readonly unsubscribingPageId = signal<string | null>(null);
@@ -29,15 +32,20 @@ export class ConnectionsComponent implements OnInit {
   readonly isConnectingGhl = signal(false);
   readonly isConnectingMeta = signal(false);
   readonly isConnectingShopify = signal(false);
+  readonly isConnectingEmail = signal(false);
   readonly disconnectingGhlId = signal<string | null>(null);
   readonly disconnectingMetaId = signal<string | null>(null);
   readonly disconnectingShopifyId = signal<string | null>(null);
+  readonly disconnectingEmailId = signal<string | null>(null);
+  readonly testingEmailId = signal<string | null>(null);
   readonly shopifyStoreDomain = signal<string>('');
+  readonly newEmailInput = signal<string>('');
 
   constructor(
     private metaService: MetaService,
     private ghlService: GhlService,
     private shopifyService: ShopifyService,
+    private emailService: EmailService,
     private route: ActivatedRoute
   ) {}
 
@@ -58,6 +66,10 @@ export class ConnectionsComponent implements OnInit {
     this.metaService.getConnections().subscribe((c) => this.metaConnections.set(c));
     this.shopifyService.getConnections().subscribe({
       next: (c) => this.shopifyConnections.set(c),
+      error: () => {},
+    });
+    this.emailService.getConnections().subscribe({
+      next: (c) => this.emailConnections.set(c),
       error: () => {},
     });
     this.ghlService.getConnections().subscribe({
@@ -207,6 +219,61 @@ export class ConnectionsComponent implements OnInit {
       error: (err) => {
         this.disconnectingShopifyId.set(null);
         this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to disconnect Shopify store.' });
+      }
+    });
+  }
+
+  connectEmail(): void {
+    const email = this.newEmailInput().trim();
+    if (!email || !email.includes('@')) {
+      this.notice.set({ kind: 'error', text: 'Please enter a valid email address (e.g. office@domain.com).' });
+      return;
+    }
+
+    this.isConnectingEmail.set(true);
+    this.emailService.addConnection(email).subscribe({
+      next: (conn) => {
+        this.isConnectingEmail.set(false);
+        this.newEmailInput.set('');
+        this.notice.set({ kind: 'success', text: `Email connection for "${conn.email}" added successfully.` });
+        this.load();
+      },
+      error: (err) => {
+        this.isConnectingEmail.set(false);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to add email connection.' });
+      }
+    });
+  }
+
+  disconnectEmail(connectionId: string, email: string): void {
+    if (!confirm(`Are you sure you want to remove "${email}" from receiving lead notifications?`)) {
+      return;
+    }
+
+    this.disconnectingEmailId.set(connectionId);
+    this.emailService.disconnect(connectionId).subscribe({
+      next: () => {
+        this.disconnectingEmailId.set(null);
+        this.notice.set({ kind: 'success', text: `Email "${email}" disconnected successfully.` });
+        this.load();
+      },
+      error: (err) => {
+        this.disconnectingEmailId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to disconnect email.' });
+      }
+    });
+  }
+
+  sendTestEmail(email: string, connectionId: string): void {
+    this.testingEmailId.set(connectionId);
+    this.emailService.sendTestEmail(email).subscribe({
+      next: (res) => {
+        this.testingEmailId.set(null);
+        this.notice.set({ kind: 'success', text: res.message || `Test lead email sent successfully to ${email}!` });
+      },
+      error: (err) => {
+        this.testingEmailId.set(null);
+        this.notice.set({ kind: 'error', text: err?.error?.error || 'Failed to send test lead email.' });
       }
     });
   }

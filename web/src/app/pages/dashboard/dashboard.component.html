@@ -2,7 +2,7 @@
   <div class="page-header">
     <div>
       <h1>Leads</h1>
-      <p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL or Shopify.</p>
+      <p class="page-subtitle">Every Meta lead form submission and whether it made it into GHL, Shopify, or Email.</p>
     </div>
   </div>
 
@@ -12,9 +12,9 @@
       <div class="stat-label">Total Leads</div>
       <div class="stat-value">{{ totalCount() }}</div>
     </div>
-    <div class="stat-card stat-both" [class.active]="statusFilter() === 'both'" (click)="setStatusFilter('both')">
-      <div class="stat-label">Sent to Both</div>
-      <div class="stat-value">{{ sentBothCount() }}</div>
+    <div class="stat-card stat-all" [class.active]="statusFilter() === 'all_destinations'" (click)="setStatusFilter('all_destinations')">
+      <div class="stat-label">Sent to All</div>
+      <div class="stat-value">{{ sentAllCount() }}</div>
     </div>
     <div class="stat-card stat-ghl" [class.active]="statusFilter() === 'ghl'" (click)="setStatusFilter('ghl')">
       <div class="stat-label">Sent to GHL</div>
@@ -23,6 +23,10 @@
     <div class="stat-card stat-shopify" [class.active]="statusFilter() === 'shopify'" (click)="setStatusFilter('shopify')">
       <div class="stat-label">Sent to Shopify</div>
       <div class="stat-value">{{ sentShopifyCount() }}</div>
+    </div>
+    <div class="stat-card stat-email" [class.active]="statusFilter() === 'email'" (click)="setStatusFilter('email')">
+      <div class="stat-label">Sent to Email</div>
+      <div class="stat-value">{{ sentEmailCount() }}</div>
     </div>
     <div class="stat-card stat-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
       <div class="stat-label">Skipped (Unmapped)</div>
@@ -59,9 +63,9 @@
           <button type="button" class="pill" [class.active]="statusFilter() === 'all'" (click)="setStatusFilter('all')">
             All ({{ totalCount() }})
           </button>
-          @if (sentBothCount() > 0) {
-            <button type="button" class="pill pill-both" [class.active]="statusFilter() === 'both'" (click)="setStatusFilter('both')">
-              Sent to Both ({{ sentBothCount() }})
+          @if (sentAllCount() > 0) {
+            <button type="button" class="pill pill-all" [class.active]="statusFilter() === 'all_destinations'" (click)="setStatusFilter('all_destinations')">
+              Sent to All ({{ sentAllCount() }})
             </button>
           }
           <button type="button" class="pill pill-ghl" [class.active]="statusFilter() === 'ghl'" (click)="setStatusFilter('ghl')">
@@ -70,6 +74,11 @@
           <button type="button" class="pill pill-shopify" [class.active]="statusFilter() === 'shopify'" (click)="setStatusFilter('shopify')">
             Sent to Shopify ({{ sentShopifyCount() }})
           </button>
+          @if (sentEmailCount() > 0) {
+            <button type="button" class="pill pill-email" [class.active]="statusFilter() === 'email'" (click)="setStatusFilter('email')">
+              Sent to Email ({{ sentEmailCount() }})
+            </button>
+          }
           <button type="button" class="pill pill-skipped" [class.active]="statusFilter() === 4" (click)="setStatusFilter(4)">
             Skipped ({{ skippedCount() }})
           </button>
@@ -173,7 +182,13 @@
                         <code>{{ lead.shopifyCustomerId }}</code>
                       </div>
                     }
-                    @if (!lead.ghlContactId && !lead.shopifyCustomerId) {
+                    @if (lead.emailSentTo || lead.emailDeliveryStatus === 'Sent' || lead.emailDeliveryStatus === 'Delivered with warning') {
+                      <div class="dest-chip dest-email" [title]="'Email: ' + (lead.emailSentTo || lead.emailDeliveryStatus)">
+                        <span class="dest-tag">Email</span>
+                        <code>{{ lead.emailSentTo || lead.emailDeliveryStatus }}</code>
+                      </div>
+                    }
+                    @if (!lead.ghlContactId && !lead.shopifyCustomerId && !lead.emailSentTo && !lead.emailDeliveryStatus) {
                       <span class="muted">—</span>
                     }
                   </div>
@@ -353,6 +368,41 @@
                   <button type="button" class="btn-copy" (click)="copyText(lead.leadgenId, 'leadgen')" title="Copy Leadgen ID">
                     {{ copiedKey() === 'leadgen' ? '✓ Copied' : 'Copy' }}
                   </button>
+                </div>
+              </div>
+
+              <!-- Email Status & Recipient(s) -->
+              <div class="meta-item">
+                <div class="meta-item-header">
+                  <span class="meta-label">Email Notification</span>
+                  @if (lead.emailDeliveryStatus) {
+                    <span [class]="getEmailStatusBadgeClass(lead.emailDeliveryStatus)" style="font-size: 0.7rem; padding: 2px 8px;">
+                      {{ lead.emailDeliveryStatus }}
+                    </span>
+                  }
+                </div>
+                <div class="meta-value-copy">
+                  @if (lead.emailSentTo) {
+                    @if (getEmailList(lead.emailSentTo).length > 1) {
+                      <div class="email-recipients-list">
+                        @for (em of getEmailList(lead.emailSentTo); track em) {
+                          <div class="email-recipient-row">
+                            <code [title]="em">{{ em }}</code>
+                            <button type="button" class="btn-copy-sm" (click)="copyText(em, 'email_' + em)" title="Copy Email ID">
+                              {{ copiedKey() === ('email_' + em) ? '✓' : 'Copy' }}
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <code [title]="lead.emailSentTo">{{ lead.emailSentTo }}</code>
+                      <button type="button" class="btn-copy" (click)="copyText(lead.emailSentTo, 'emailSentTo')" title="Copy Email ID">
+                        {{ copiedKey() === 'emailSentTo' ? '✓ Copied' : 'Copy' }}
+                      </button>
+                    }
+                  } @else {
+                    <span class="muted">{{ lead.emailDeliveryStatus || 'Not configured' }}</span>
+                  }
                 </div>
               </div>
 

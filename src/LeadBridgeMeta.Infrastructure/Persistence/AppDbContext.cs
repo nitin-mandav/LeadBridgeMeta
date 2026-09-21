@@ -19,6 +19,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
     public DbSet<ShopifyConnection> ShopifyConnections => Set<ShopifyConnection>();
     public DbSet<FieldMapping> FieldMappings => Set<FieldMapping>();
     public DbSet<ShopifyFieldMapping> ShopifyFieldMappings => Set<ShopifyFieldMapping>();
+    public DbSet<EmailConnection> EmailConnections => Set<EmailConnection>();
     public DbSet<LeadEvent> LeadEvents => Set<LeadEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -82,6 +83,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid
             e.HasOne(x => x.MetaLeadForm).WithMany(f => f.ShopifyFieldMappings).HasForeignKey(x => x.MetaLeadFormId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.MetaFieldKey).HasMaxLength(200).IsRequired();
             e.Property(x => x.ShopifyFieldKey).HasMaxLength(200).IsRequired();
+        });
+
+        builder.Entity<EmailConnection>(e =>
+        {
+            e.HasOne(x => x.Tenant).WithMany(t => t.EmailConnections).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
         });
 
         builder.Entity<LeadEvent>(e =>

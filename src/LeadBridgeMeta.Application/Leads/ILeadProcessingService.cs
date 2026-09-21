@@ -13,7 +13,9 @@ public record LeadEventDto(
     int RetryCount,
     DateTime ReceivedAtUtc,
     DateTime? ProcessedAtUtc,
-    string? RawLeadDataJson = null);
+    string? RawLeadDataJson = null,
+    string? EmailDeliveryStatus = null,
+    string? EmailSentTo = null);
 
 /// <summary>Handles one Meta leadgen webhook notification end-to-end: fetch the lead's answers from the Graph API,
 /// apply the tenant's field mappings, and push the resulting contact into the mapped GHL location.</summary>

@@ -15,6 +15,7 @@ public interface IAppDbContext
     DbSet<ShopifyConnection> ShopifyConnections { get; }
     DbSet<FieldMapping> FieldMappings { get; }
     DbSet<ShopifyFieldMapping> ShopifyFieldMappings { get; }
+    DbSet<EmailConnection> EmailConnections { get; }
     DbSet<LeadEvent> LeadEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
